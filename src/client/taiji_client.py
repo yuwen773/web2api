@@ -1,20 +1,29 @@
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+import json
+import logging
+from collections.abc import AsyncIterator, Awaitable
+from typing import Any, Literal, overload
 
 import httpx
 
 from src.models.auth import LoginRequest, LoginResponse
 
 
+DEFAULT_ACCEPT_LANGUAGE = "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6"
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/145.0.0.0 Safari/537.36"
+    "Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0"
 )
 DEFAULT_SEC_CH_UA = '"Not:A-Brand";v="99", "Microsoft Edge";v="145", "Chromium";v="145"'
 DEFAULT_SEC_CH_UA_MOBILE = "?0"
 DEFAULT_SEC_CH_UA_PLATFORM = '"Windows"'
+CHAT_REFERER_PATH = "/chat?_userMenuKey=chat"
+
+
+logger = logging.getLogger(__name__)
 
 
 class TaijiAPIError(RuntimeError):
@@ -45,22 +54,7 @@ class TaijiClient:
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=timeout,
-            headers={
-                "accept": "application/json, text/plain, */*",
-                "accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
-                "content-type": "application/json",
-                "x-app-version": self.app_version,
-                "user-agent": DEFAULT_USER_AGENT,
-                "sec-ch-ua": DEFAULT_SEC_CH_UA,
-                "sec-ch-ua-mobile": DEFAULT_SEC_CH_UA_MOBILE,
-                "sec-ch-ua-platform": DEFAULT_SEC_CH_UA_PLATFORM,
-                "sec-fetch-dest": "empty",
-                "sec-fetch-mode": "cors",
-                "sec-fetch-site": "same-origin",
-                "priority": "u=1, i",
-                "origin": self.base_url,
-                "referer": f"{self.base_url}/chat",
-            },
+            headers=self._default_headers(),
             cookies=httpx.Cookies(),
         )
 
@@ -77,23 +71,26 @@ class TaijiClient:
     def cookies(self) -> httpx.Cookies:
         return self._client.cookies
 
+    @property
+    def chat_referer(self) -> str:
+        return f"{self.base_url}{CHAT_REFERER_PATH}"
+
     async def login(self, account: str, password: str) -> str:
         payload = LoginRequest(account=account, password=password).model_dump()
         payload["captchaId"] = ""
 
-        response = await self._client.post(
+        response = await self._request(
+            "POST",
             "/api/user/login",
-            json=payload,
-            headers={
-                "accept": "application/json, text/plain, */*",
-                "content-type": "application/json",
-                "x-app-version": self.app_version,
-                "origin": self.base_url,
-                "referer": f"{self.base_url}/auth",
-            },
+            json_payload=payload,
+            headers=self._headers(
+                accept="application/json, text/plain, */*",
+                content_type="application/json",
+                referer=f"{self.base_url}/auth",
+                origin=self.base_url,
+            ),
         )
         body = self._extract_body(response)
-
         parsed = LoginResponse.model_validate(body)
         if parsed.code != 0 or parsed.data is None or not parsed.data.token:
             raise TaijiAPIError(
@@ -111,40 +108,43 @@ class TaijiClient:
         return self.token
 
     async def get_models(self) -> list[dict[str, str]]:
-        response = await self._client.get(
+        response = await self._request(
+            "GET",
             "/api/chat/tmpl",
-            headers={
-                "accept": "application/json, text/plain, */*",
-                "authorization": self._authorization_header(),
-                "x-app-version": self.app_version,
-                "referer": f"{self.base_url}/chat",
-            },
+            headers=self._headers(
+                accept="application/json, text/plain, */*",
+                referer=self.chat_referer,
+                include_auth=True,
+            ),
         )
         body = self._extract_body(response)
         self._assert_success(body, response.status_code)
         return self._extract_models(body)
 
     async def create_session(self, model: str) -> int:
-        response = await self._client.post(
+        response = await self._request(
+            "POST",
             "/api/chat/session",
-            json={
-                "model": model,
-                "plugins": [],
-                "mcp": [],
-            },
-            headers={
-                "accept": "application/json, text/plain, */*",
-                "authorization": self._authorization_header(),
-                "content-type": "application/json",
-                "x-app-version": self.app_version,
-                "origin": self.base_url,
-                "referer": f"{self.base_url}/chat",
-            },
+            json_payload={"model": model, "plugins": [], "mcp": []},
+            headers=self._headers(
+                accept="application/json, text/plain, */*",
+                content_type="application/json",
+                referer=self.chat_referer,
+                origin=self.base_url,
+                include_auth=True,
+            ),
         )
         body = self._extract_body(response)
         self._assert_success(body, response.status_code)
 
-        session_id = body.get("data", {}).get("id")
+        data = body.get("data")
+        if not isinstance(data, dict):
+            raise TaijiAPIError(
+                "Taiji create_session response does not contain a valid data object.",
+                status_code=response.status_code,
+            )
+
+        session_id = data.get("id")
         if isinstance(session_id, int):
             return session_id
         if isinstance(session_id, str) and session_id.isdigit():
@@ -152,6 +152,238 @@ class TaijiClient:
         raise TaijiAPIError(
             "Taiji create_session response does not contain a valid session id.",
             status_code=response.status_code,
+        )
+
+    async def delete_session(self, session_id: int) -> dict[str, Any]:
+        response = await self._request(
+            "DELETE",
+            f"/api/chat/session/{session_id}",
+            headers=self._headers(
+                accept="application/json, text/plain, */*",
+                referer=self.chat_referer,
+                origin=self.base_url,
+                include_auth=True,
+            ),
+        )
+        body = self._extract_body(response)
+        self._assert_success(body, response.status_code)
+        return body
+
+    @overload
+    def send_message(
+        self,
+        session_id: int,
+        text: str,
+        files: list[dict[str, str]] | None = None,
+        *,
+        stream: Literal[False] = False,
+    ) -> Awaitable[dict[str, Any]]: ...
+
+    @overload
+    def send_message(
+        self,
+        session_id: int,
+        text: str,
+        files: list[dict[str, str]] | None = None,
+        *,
+        stream: Literal[True],
+    ) -> AsyncIterator[dict[str, Any]]: ...
+
+    def send_message(
+        self,
+        session_id: int,
+        text: str,
+        files: list[dict[str, str]] | None = None,
+        *,
+        stream: bool = False,
+    ) -> Awaitable[dict[str, Any]] | AsyncIterator[dict[str, Any]]:
+        if stream:
+            return self._send_message_stream(session_id=session_id, text=text, files=files)
+        return self._send_message_non_stream(session_id=session_id, text=text, files=files)
+
+    async def _send_message_non_stream(
+        self,
+        *,
+        session_id: int,
+        text: str,
+        files: list[dict[str, str]] | None,
+    ) -> dict[str, Any]:
+        text_parts: list[str] = []
+        summary_data: dict[str, Any] | None = None
+
+        async for chunk in self._iter_chat_chunks(
+            session_id=session_id,
+            text=text,
+            files=files,
+        ):
+            chunk_type = chunk.get("type")
+            if chunk_type == "string":
+                text_parts.append(str(chunk.get("data", "")))
+                continue
+
+            if chunk_type == "object" and isinstance(chunk.get("data"), dict):
+                summary_data = chunk["data"]
+
+        if summary_data is None:
+            raise TaijiAPIError("Taiji chat response is missing the final summary chunk.")
+
+        return {
+            "text": "".join(text_parts),
+            "promptTokens": self._safe_int(summary_data.get("promptTokens")) or 0,
+            "completionTokens": self._safe_int(summary_data.get("completionTokens")) or 0,
+            "useTokens": self._safe_int(summary_data.get("useTokens")) or 0,
+            "model": str(summary_data.get("model") or ""),
+            "taskId": str(summary_data.get("taskId") or ""),
+        }
+
+    async def _send_message_stream(
+        self,
+        *,
+        session_id: int,
+        text: str,
+        files: list[dict[str, str]] | None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        try:
+            async for chunk in self._iter_chat_chunks(
+                session_id=session_id,
+                text=text,
+                files=files,
+            ):
+                yield chunk
+        except asyncio.CancelledError:
+            logger.info("Client disconnected during Taiji streaming response.")
+            raise
+
+    async def _iter_chat_chunks(
+        self,
+        *,
+        session_id: int,
+        text: str,
+        files: list[dict[str, str]] | None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        try:
+            async with self._client.stream(
+                "POST",
+                "/api/chat/completions",
+                json={
+                    "text": text,
+                    "sessionId": session_id,
+                    "files": files or [],
+                },
+                headers=self._headers(
+                    accept="text/event-stream",
+                    content_type="application/json",
+                    referer=self.chat_referer,
+                    origin=self.base_url,
+                    include_auth=True,
+                ),
+            ) as response:
+                if response.status_code >= 400:
+                    await response.aread()
+                    self._extract_body(response)
+                    return
+
+                async for raw_line in response.aiter_lines():
+                    line = raw_line.strip()
+                    if not line or not line.startswith("data:"):
+                        continue
+
+                    payload = line[5:].strip()
+                    if not payload:
+                        continue
+                    if payload == "[DONE]":
+                        return
+
+                    chunk = self._parse_sse_payload(payload, response.status_code)
+                    self._assert_sse_chunk_success(chunk, response.status_code)
+                    yield chunk
+        except httpx.RequestError as exc:
+            raise TaijiAPIError(f"Taiji stream request failed: {exc!s}") from exc
+
+    def _default_headers(self) -> dict[str, str]:
+        return {
+            "accept": "application/json, text/plain, */*",
+            "accept-language": DEFAULT_ACCEPT_LANGUAGE,
+            "content-type": "application/json",
+            "x-app-version": self.app_version,
+            "user-agent": DEFAULT_USER_AGENT,
+            "sec-ch-ua": DEFAULT_SEC_CH_UA,
+            "sec-ch-ua-mobile": DEFAULT_SEC_CH_UA_MOBILE,
+            "sec-ch-ua-platform": DEFAULT_SEC_CH_UA_PLATFORM,
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-origin",
+            "priority": "u=1, i",
+            "origin": self.base_url,
+            "referer": self.chat_referer,
+        }
+
+    def _headers(
+        self,
+        *,
+        accept: str | None = None,
+        content_type: str | None = None,
+        referer: str | None = None,
+        origin: str | None = None,
+        include_auth: bool = False,
+    ) -> dict[str, str]:
+        headers: dict[str, str] = {"x-app-version": self.app_version}
+        if accept:
+            headers["accept"] = accept
+        if content_type:
+            headers["content-type"] = content_type
+        if referer:
+            headers["referer"] = referer
+        if origin:
+            headers["origin"] = origin
+        if include_auth:
+            headers["authorization"] = self._authorization_header()
+        return headers
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        headers: dict[str, str] | None = None,
+        json_payload: dict[str, Any] | None = None,
+    ) -> httpx.Response:
+        try:
+            return await self._client.request(
+                method=method,
+                url=path,
+                headers=headers,
+                json=json_payload,
+            )
+        except httpx.RequestError as exc:
+            raise TaijiAPIError(f"Taiji request failed: {exc!s}") from exc
+
+    def _parse_sse_payload(self, payload: str, status_code: int) -> dict[str, Any]:
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise TaijiAPIError(
+                f"Taiji SSE chunk is not valid JSON: {payload!r}",
+                status_code=status_code,
+            ) from exc
+
+        if not isinstance(parsed, dict):
+            raise TaijiAPIError(
+                "Taiji SSE chunk has unexpected structure.",
+                status_code=status_code,
+            )
+        return parsed
+
+    def _assert_sse_chunk_success(self, chunk: dict[str, Any], status_code: int) -> None:
+        code = self._safe_int(chunk.get("code"))
+        if code == 0:
+            return
+
+        message = str(chunk.get("msg") or chunk.get("data") or "Taiji SSE stream returned an error.")
+        raise TaijiAPIError(
+            message,
+            code=code,
+            status_code=status_code,
         )
 
     def _authorization_header(self) -> str:
