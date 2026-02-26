@@ -9,6 +9,7 @@ from typing import Any, Literal, overload
 import httpx
 
 from src.models.auth import LoginRequest, LoginResponse
+from src.utils.concurrency import get_semaphore
 
 
 DEFAULT_ACCEPT_LANGUAGE = "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6"
@@ -50,6 +51,8 @@ class TaijiClient:
         self.base_url = base_url.rstrip("/")
         self.app_version = app_version
         self.token: str | None = None
+        self._account: str | None = None
+        self._password: str | None = None
         self.server_name_session: str | None = None
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
@@ -89,6 +92,7 @@ class TaijiClient:
                 referer=f"{self.base_url}/auth",
                 origin=self.base_url,
             ),
+            retry_on_401=False,
         )
         body = self._extract_body(response)
         parsed = LoginResponse.model_validate(body)
@@ -100,6 +104,8 @@ class TaijiClient:
             )
 
         self.token = parsed.data.token
+        self._account = account
+        self._password = password
         self._client.headers["authorization"] = self._authorization_header()
         self.server_name_session = (
             self._client.cookies.get("server_name_session")
@@ -261,44 +267,52 @@ class TaijiClient:
         text: str,
         files: list[dict[str, str]] | None,
     ) -> AsyncIterator[dict[str, Any]]:
-        try:
-            async with self._client.stream(
-                "POST",
-                "/api/chat/completions",
-                json={
-                    "text": text,
-                    "sessionId": session_id,
-                    "files": files or [],
-                },
-                headers=self._headers(
-                    accept="text/event-stream",
-                    content_type="application/json",
-                    referer=self.chat_referer,
-                    origin=self.base_url,
-                    include_auth=True,
-                ),
-            ) as response:
-                if response.status_code >= 400:
-                    await response.aread()
-                    self._extract_body(response)
-                    return
+        async with get_semaphore():
+            for attempt in range(2):
+                try:
+                    async with self._client.stream(
+                        "POST",
+                        "/api/chat/completions",
+                        json={
+                            "text": text,
+                            "sessionId": session_id,
+                            "files": files or [],
+                        },
+                        headers=self._headers(
+                            accept="text/event-stream",
+                            content_type="application/json",
+                            referer=self.chat_referer,
+                            origin=self.base_url,
+                            include_auth=True,
+                        ),
+                    ) as response:
+                        if response.status_code == 401 and attempt == 0:
+                            await response.aread()
+                            await self._relogin()
+                            continue
 
-                async for raw_line in response.aiter_lines():
-                    line = raw_line.strip()
-                    if not line or not line.startswith("data:"):
-                        continue
+                        if response.status_code >= 400:
+                            await response.aread()
+                            self._extract_body(response)
+                            return
 
-                    payload = line[5:].strip()
-                    if not payload:
-                        continue
-                    if payload == "[DONE]":
+                        async for raw_line in response.aiter_lines():
+                            line = raw_line.strip()
+                            if not line or not line.startswith("data:"):
+                                continue
+
+                            payload = line[5:].strip()
+                            if not payload:
+                                continue
+                            if payload == "[DONE]":
+                                return
+
+                            chunk = self._parse_sse_payload(payload, response.status_code)
+                            self._assert_sse_chunk_success(chunk, response.status_code)
+                            yield chunk
                         return
-
-                    chunk = self._parse_sse_payload(payload, response.status_code)
-                    self._assert_sse_chunk_success(chunk, response.status_code)
-                    yield chunk
-        except httpx.RequestError as exc:
-            raise TaijiAPIError(f"Taiji stream request failed: {exc!s}") from exc
+                except httpx.RequestError as exc:
+                    raise TaijiAPIError(f"Taiji stream request failed: {exc!s}") from exc
 
     def _default_headers(self) -> dict[str, str]:
         return {
@@ -347,16 +361,49 @@ class TaijiClient:
         *,
         headers: dict[str, str] | None = None,
         json_payload: dict[str, Any] | None = None,
+        retry_on_401: bool = True,
     ) -> httpx.Response:
-        try:
-            return await self._client.request(
-                method=method,
-                url=path,
-                headers=headers,
-                json=json_payload,
+        request_headers = dict(headers) if headers else None
+        for attempt in range(2):
+            try:
+                response = await self._client.request(
+                    method=method,
+                    url=path,
+                    headers=request_headers,
+                    json=json_payload,
+                )
+            except httpx.RequestError as exc:
+                raise TaijiAPIError(f"Taiji request failed: {exc!s}") from exc
+
+            should_retry_401 = (
+                response.status_code == 401
+                and retry_on_401
+                and attempt == 0
+                and path != "/api/user/login"
+                and self.token is not None
             )
-        except httpx.RequestError as exc:
-            raise TaijiAPIError(f"Taiji request failed: {exc!s}") from exc
+            if not should_retry_401:
+                return response
+
+            await response.aread()
+            await self._relogin()
+            if request_headers is not None:
+                self._refresh_authorization_header(request_headers)
+
+        return response
+
+    def _refresh_authorization_header(self, headers: dict[str, str]) -> None:
+        if "authorization" in headers:
+            headers["authorization"] = self._authorization_header()
+
+    async def _relogin(self) -> None:
+        if not self._account or not self._password:
+            raise TaijiAPIError(
+                "Token expired but no stored credentials are available for automatic re-login.",
+                status_code=401,
+            )
+        logger.info("Taiji token expired (HTTP 401), re-authenticating and retrying once.")
+        await self.login(self._account, self._password)
 
     def _parse_sse_payload(self, payload: str, status_code: int) -> dict[str, Any]:
         try:
