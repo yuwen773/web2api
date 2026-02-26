@@ -20,7 +20,7 @@
 
 | Header | 值 | 说明 | 重要性 |
 |--------|-----|------|--------|
-| `authorization` | `<JWT_TOKEN>` | 登录后获取的 Bearer token | ⭐⭐⭐ 必需 |
+| `authorization` | `<JWT_TOKEN>` | 登录后获取的 JWT token（⚠️ 不需要 Bearer 前缀） | ⭐⭐⭐ 必需 |
 | `x-app-version` | `2.14.0` | **应用版本号**，服务端可能据此做校验 | ⭐⭐⭐ 必需 |
 | `content-type` | `application/json` | POST 请求内容类型 | ⭐⭐⭐ 必需 |
 | `accept` | `application/json, text/plain, */*` | 接受的响应类型 | ⭐⭐⭐ 必需 |
@@ -52,8 +52,8 @@ class TaijiClient:
         )
         # httpx 会自动将响应中的 Set-Cookie 保存到 self.client.cookies
         self.token = response.json()["data"]["token"]
-        # 更新 authorization header
-        self.client.headers["authorization"] = f"Bearer {self.token}"
+        # 更新 authorization header（⚠️ 太极AI 不需要 Bearer 前缀）
+        self.client.headers["authorization"] = self.token
 ```
 
 ### 浏览器指纹请求头（反爬检测）
@@ -348,13 +348,23 @@ data: [DONE]
    ```python
    headers = {
        "accept": "application/json, text/plain, */*",
-       "authorization": f"Bearer {self.token}",
+       "authorization": self.token,  # ⚠️ 不需要 Bearer 前缀！
        "x-app-version": "2.14.0",
        "referer": "https://ai.aurod.cn/chat",
    }
    ```
 4. 解析响应，提取 models 数组
-5. 返回格式：`[{"label": "...", "value": "..."}, ...]`
+5. **响应格式修正**（2025-02-26 验证）：
+   ```python
+   # data 可能是 dict 或 list，需要处理两种情况
+   raw_data = response["data"]
+   if isinstance(raw_data, dict) and "models" in raw_data:
+       models = raw_data["models"]  # 实际模型列表
+   elif isinstance(raw_data, list):
+       models = raw_data
+   else:
+       models = []
+   ```
 
 **测试：**
 1. 创建 `tests/test_models.py`
@@ -375,7 +385,7 @@ data: [DONE]
    ```python
    headers = {
        "accept": "application/json, text/plain, */*",
-       "authorization": f"Bearer {self.token}",
+       "authorization": self.token,  # ⚠️ 不需要 Bearer 前缀
        "content-type": "application/json",
        "x-app-version": "2.14.0",
        "origin": "https://ai.aurod.cn",
@@ -404,7 +414,7 @@ data: [DONE]
    ```python
    headers = {
        "accept": "application/json, text/plain, */*",
-       "authorization": f"Bearer {self.token}",
+       "authorization": self.token,  # ⚠️ 不需要 Bearer 前缀
        "x-app-version": "2.14.0",
        "origin": "https://ai.aurod.cn",
        "referer": "https://ai.aurod.cn/chat?_userMenuKey=chat",
@@ -499,7 +509,7 @@ DELETE /api/chat/session/{id}
    ```python
    headers = {
        "accept": "text/event-stream",  # SSE 流式响应
-       "authorization": f"Bearer {self.token}",
+       "authorization": self.token,  # ⚠️ 不需要 Bearer 前缀
        "content-type": "application/json",
        "x-app-version": "2.14.0",
        "referer": "https://ai.aurod.cn/chat",

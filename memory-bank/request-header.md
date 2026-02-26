@@ -49,10 +49,24 @@
   └────────────────┴────────────────────────────────────┘
 
   ---
+  ---
+  重要修正（2025-02-26 测试验证）
+
+  ⚠️ **authorization 不需要 Bearer 前缀**
+
+  ```python
+  # ❌ 错误
+  headers["authorization"] = f"Bearer {token}"
+
+  # ✅ 正确
+  headers["authorization"] = token  # 直接传 JWT，不要 Bearer 前缀
+  ```
+
+  ---
   建议
 
   最小必需请求头（用于 API 调用）：
-  authorization: <your_jwt_token>
+  authorization: <your_jwt_token>  # 注意：不要加 Bearer 前缀！
   x-app-version: 2.14.0
   content-type: application/json
 
