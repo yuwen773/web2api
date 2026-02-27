@@ -3,7 +3,6 @@ from __future__ import annotations
 from src.models.responses_request import (
     ResponseRequest,
     ResponseInputItem,
-    ResponseInputStr,
 )
 from src.models.openai_request import ChatCompletionRequest, ChatMessage
 from typing import Any
@@ -30,9 +29,12 @@ def response_request_to_chat_request(req: ResponseRequest) -> ChatCompletionRequ
     # 处理 input
     if isinstance(req.input, str):
         messages.append(ChatMessage(role="user", content=req.input))
-    elif isinstance(req.input, ResponseInputStr):
+    elif isinstance(req.input, dict):
         # Codex 兼容格式: {"str": "hello"}
-        messages.append(ChatMessage(role="user", content=req.input.str))
+        if "str" in req.input and isinstance(req.input["str"], str):
+            messages.append(ChatMessage(role="user", content=req.input["str"]))
+        else:
+            messages.append(ChatMessage(role="user", content=""))
     elif isinstance(req.input, list):
         # 合并所有文本输入项
         text_parts = []
