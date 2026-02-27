@@ -23,7 +23,7 @@ class ResponseTool(BaseModel):
     - web_search: 网络搜索
     - file_search: 文件搜索
     """
-    type: str = Field(..., pattern="^(function|code_interpreter|retrieval|web_search|file_search)$")
+    type: str  # 临时移除 pattern 限制，调试用
     name: Optional[str] = None
     description: Optional[str] = None
     parameters: Optional[dict[str, Any]] = None
