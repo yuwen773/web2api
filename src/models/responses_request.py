@@ -33,7 +33,7 @@ class ResponseRequest(BaseModel):
     """
     model: str = Field(..., min_length=1)
     input: Any = ""  # 使用 Any 接受任何格式，在业务逻辑中处理
-    instructions: Optional[str] = Field(default=None, max_length=8000)
+    instructions: Optional[str] = None
     max_tokens: Optional[int] = Field(default=None, gt=0)
     tools: Optional[list[ResponseTool]] = None
     tool_choice: Optional[Union[str, dict[str, Any]]] = "auto"
