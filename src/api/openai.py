@@ -13,7 +13,12 @@ from fastapi.responses import StreamingResponse
 
 from src.client.taiji_client import TaijiAPIError
 from src.models.openai_request import ChatCompletionRequest
+from src.models.responses_request import ResponseRequest
 from src.utils.message_converter import convert_openai_messages
+from src.utils.responses_converter import (
+    response_request_to_chat_request,
+    chat_response_to_response_object,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -350,3 +355,166 @@ async def _safe_delete_session(taiji_client: Any, session_id: int) -> None:
         await taiji_client.delete_session(session_id)
     except TaijiAPIError as exc:
         logger.warning("Failed to delete Taiji session %s: %s", session_id, exc)
+
+
+@router.post("/v1/responses", response_model=None)
+async def responses_create(
+    request_body: ResponseRequest,
+    request: Request,
+) -> Any:
+    """OpenAI Responses API 兼容端点
+
+    将 Responses 格式请求转换为 Chat Completions 格式，
+    复用现有 Taiji 客户端调用逻辑。
+    """
+    taiji_client = _get_taiji_client(request)
+
+    # 转换为 Chat Completions 格式
+    chat_request = response_request_to_chat_request(request_body)
+
+    if request_body.stream:
+        return await _responses_stream(
+            chat_request, taiji_client, request_body.model
+        )
+    return await _responses_non_stream(
+        chat_request, taiji_client, request_body.model
+    )
+
+
+async def _responses_non_stream(
+    chat_request: ChatCompletionRequest,
+    taiji_client: Any,
+    model: str,
+) -> dict[str, Any]:
+    """Responses 非流式响应处理"""
+    chat_response = await _chat_completions_non_stream(chat_request, taiji_client)
+    return chat_response_to_response_object(model, chat_response)
+
+
+async def _responses_stream(
+    chat_request: ChatCompletionRequest,
+    taiji_client: Any,
+    model: str,
+) -> StreamingResponse:
+    """Responses 流式响应处理
+
+    复用现有 Chat Completions 流式逻辑，
+    将 SSE 事件转换为 Responses 格式。
+    """
+    session_id = await _create_session_or_raise(taiji_client, chat_request.model)
+
+    try:
+        prompt_text, files = await _build_prompt_payload(chat_request)
+        stream = taiji_client.send_message(
+            session_id=session_id,
+            text=prompt_text,
+            files=files,
+            stream=True,
+        )
+        first_chunk = await anext(stream)
+    except StopAsyncIteration:
+        await _safe_delete_session(taiji_client, session_id)
+        raise HTTPException(
+            status_code=502,
+            detail="Taiji stream ended before any chunk was returned.",
+        ) from None
+    except TaijiAPIError as exc:
+        await _safe_delete_session(taiji_client, session_id)
+        raise _http_exception_from_taiji_error(exc) from exc
+    except HTTPException:
+        await _safe_delete_session(taiji_client, session_id)
+        raise
+
+    if _is_error_chunk(first_chunk):
+        await _safe_delete_session(taiji_client, session_id)
+        raise HTTPException(
+            status_code=400,
+            detail=f"太极AI错误: {first_chunk.get('msg') or 'unknown error'}",
+        )
+
+    response_id = f"resp-{uuid4().hex}"
+    created = int(time.time())
+
+    async def stream_generator() -> AsyncIterator[str]:
+        try:
+            # 发送 response.created 事件
+            yield _format_sse({
+                "type": "response.created",
+                "response": {
+                    "id": response_id,
+                    "created": created,
+                    "model": model,
+                    "status": "in_progress",
+                }
+            })
+
+            # 发送输出项添加事件
+            yield _format_sse({
+                "type": "response.output_item.added",
+                "item": {"type": "text", "index": 0}
+            })
+
+            # 处理第一个 chunk
+            for chunk in (first_chunk,):
+                payload = _chunk_to_response_delta(chunk)
+                if payload:
+                    yield _format_sse(payload)
+
+            # 处理后续 chunks
+            async for chunk in stream:
+                if _is_error_chunk(chunk):
+                    raise TaijiAPIError(
+                        str(chunk.get("msg") or "Taiji stream returned an error chunk."),
+                        code=_to_int(chunk.get("code")),
+                        status_code=400,
+                    )
+                payload = _chunk_to_response_delta(chunk)
+                if payload:
+                    yield _format_sse(payload)
+
+            # 发送完成事件
+            yield _format_sse({
+                "type": "response.output_item.done",
+                "item": {"type": "text", "index": 0}
+            })
+            yield _format_sse({
+                "type": "response.done",
+                "response": {
+                    "id": response_id,
+                    "status": "completed",
+                }
+            })
+        except asyncio.CancelledError:
+            logger.info("Client disconnected during Responses streaming.")
+            raise
+        finally:
+            await _safe_delete_session(taiji_client, session_id)
+
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _chunk_to_response_delta(chunk: dict[str, Any]) -> dict[str, Any] | None:
+    """将 Taiji chunk 转换为 response.delta 事件"""
+    if chunk.get("type") != "string":
+        return None
+
+    content = chunk.get("data")
+    if content is None:
+        return None
+
+    text = str(content)
+    if not text:
+        return None
+
+    return {
+        "type": "response.delta",
+        "delta": {"type": "text", "text": text}
+    }
