@@ -4,23 +4,35 @@
 
 ```
 web2api/
-├── main.py                      # FastAPI 入口
+├── main.py                      # FastAPI 入口 (93 行)
 │
 ├── src/
+│   ├── api/
+│   │   └── openai.py            # OpenAI 路由 (353 行)
 │   ├── client/
-│   │   └── taiji_client.py      # TaijiClient 类（534行）
+│   │   └── taiji_client.py      # TaijiClient 类 (534 行)
 │   ├── utils/
-│   │   ├── message_converter.py # OpenAI → 太极AI 转换
-│   │   └── concurrency.py       # 全局并发限制
+│   │   ├── message_converter.py # OpenAI → 太极AI 转换 (207 行)
+│   │   └── concurrency.py       # 全局并发限制 (15 行)
 │   └── models/
-│       ├── auth.py              # 认证模型
-│       ├── openai_request.py    # OpenAI 请求模型
-│       └── openai_response.py   # OpenAI 响应模型
+│       ├── auth.py              # 认证模型 (28 行)
+│       ├── openai_request.py    # OpenAI 请求模型 (21 行)
+│       └── openai_response.py   # OpenAI 响应模型 (33 行)
 │
-├── tests/                       # 12个测试文件，26个用例
+├── tests/                       # 11 个测试文件，30 个用例
 ├── config/config.yaml           # 配置文件
 └── memory-bank/                 # 项目知识库
 ```
+
+---
+
+## API 端点
+
+| 端点 | 方法 | 功能 | 状态 |
+|------|------|------|------|
+| `/` | GET | 健康检查 | ✅ |
+| `/v1/chat/completions` | POST | 聊天完成 (非流式+流式) | ✅ |
+| `/v1/models` | GET | 模型列表 | ✅ |
 
 ---
 
@@ -29,7 +41,7 @@ web2api/
 ```
 客户端请求 (OpenAI 格式)
     ↓
-FastAPI 路由
+FastAPI 路由 (openai.py)
     ↓
 1. 创建新会话 (create_session)
 2. messages → prompt 转换
@@ -44,37 +56,25 @@ FastAPI 路由
 
 ```python
 class TaijiClient:
-    # 上下文管理器
-    async def __aenter__(self) -> TaijiClient
-    async def __aexit__(self, exc_type, exc, tb) -> None
-
-    # 认证
     async def login(account, password) -> str
-
-    # 模型与会话
     async def get_models() -> list[dict]
     async def create_session(model) -> int
     async def delete_session(id) -> dict
-
-    # 消息发送（支持 stream=True/False）
     def send_message(session_id, text, stream) -> dict | AsyncIterator
-
-    # 内部
-    async def _request(...)           # 普通请求，支持401重试
-    async def _relogin()              # 自动重登录
+    async def close() -> None
 ```
 
 ---
 
 ## 太极AI API 端点
 
-| 端点 | 方法 | 用途 |
-|------|------|------|
-| `/api/user/login` | POST | 获取 JWT token |
-| `/api/chat/tmpl` | GET | 获取模型列表 |
-| `/api/chat/session` | POST | 创建会话 |
-| `/api/chat/session/{id}` | DELETE | 删除会话 |
-| `/api/chat/completions` | POST | 发送消息 (SSE) |
+| 端点 | 用途 |
+|------|------|
+| `POST /api/user/login` | 获取 JWT token |
+| `GET /api/chat/tmpl` | 获取模型列表 |
+| `POST /api/chat/session` | 创建会话 |
+| `DELETE /api/chat/session/{id}` | 删除会话 |
+| `POST /api/chat/completions` | 发送消息 (SSE) |
 
 ---
 
@@ -84,56 +84,28 @@ class TaijiClient:
 {
     "authorization": "<token>",        # ⚠️ 无 Bearer 前缀
     "x-app-version": "2.14.0",
-    "accept": "text/event-stream",     # 流式请求
-    "referer": "https://ai.aurod.cn/chat",
+    "accept": "text/event-stream",
 }
 ```
 
-**Cookie**: `server_name_session` (httpx 自动管理)
-
 ---
 
-## SSE 响应格式
+## OpenAI 数据模型
 
-```
-data: {"type":"string","data":"Hello","code":0}
-data: {"type":"string","data":" World","code":0}
-data: {"type":"object","data":{"promptTokens":10,...},"code":0}
-data: [DONE]
-```
-
----
-
-## 数据模型
-
-### OpenAI 请求
 ```python
-ChatCompletionRequest:
-    model: str
-    messages: list[ChatMessage]
-    stream: bool = False
-    temperature: float | None
-    max_tokens: int | None
-```
+# 请求
+ChatCompletionRequest(model, messages, stream=False)
 
-### OpenAI 响应
-```python
-ChatCompletionResponse:
-    id: str
-    object: str = "chat.completion"
-    created: int
-    model: str
-    choices: list[Choice]
-    usage: Usage
+# 响应
+ChatCompletionResponse(id, created, model, choices, usage)
 ```
 
 ---
 
 ## 待实现
 
-| 阶段 | 文件 | 功能 |
-|------|------|------|
-| 2.3-2.4 | `src/api/openai.py` | /v1/chat/completions 路由 |
-| 2.5 | `src/api/openai.py` | /v1/models 端点 |
-| 3 | `src/api/anthropic.py` | Anthropic 兼容接口 |
-| 4 | - | 日志、错误处理、Docker |
+| 阶段 | 功能 |
+|------|------|
+| 3 | Anthropic 兼容接口 |
+| 4 | 日志、错误处理、Docker |
+| 5 | SDK 兼容性测试 |

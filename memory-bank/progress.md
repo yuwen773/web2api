@@ -1,6 +1,6 @@
 # web2api 项目进度
 
-> 最后更新: 2025-02-27 | 整体完成度: ~55%
+> 最后更新: 2025-02-27 | 整体完成度: ~60%
 
 ## 整体进度
 
@@ -8,7 +8,7 @@
 |------|------|------|--------|
 | 阶段 0 | 环境准备 | ✅ | 100% |
 | 阶段 1 | 太极AI客户端 | ✅ | 100% |
-| 阶段 2 | OpenAI接口 | ⏳ | 40% |
+| 阶段 2 | OpenAI接口 | ✅ | 100% |
 | 阶段 3 | Anthropic接口 | ⏳ | 0% |
 | 阶段 4 | 生产化 | ⏳ | 0% |
 | 阶段 5-6 | 测试与部署 | ⏳ | 0% |
@@ -37,9 +37,9 @@
 |------|------|------|
 | 2.1 | FastAPI 框架 | ✅ |
 | 2.2 | OpenAI 模型 | ✅ |
-| 2.3 | /v1/chat/completions | ⏳ |
-| 2.4 | 流式响应 | ⏳ |
-| 2.5 | /v1/models | ⏳ |
+| 2.3 | /v1/chat/completions | ✅ |
+| 2.4 | 流式响应 | ✅ |
+| 2.5 | /v1/models | ✅ |
 
 ---
 
@@ -47,26 +47,31 @@
 
 | 文件 | 行数 | 功能 |
 |------|------|------|
-| `main.py` | 90 | FastAPI 入口 |
+| `main.py` | 93 | FastAPI 入口 |
+| `src/api/openai.py` | 353 | OpenAI 路由 |
 | `src/client/taiji_client.py` | 534 | TaijiClient 类 |
-| `src/utils/message_converter.py` | 207 | OpenAI → 太极AI 转换 |
-| `src/utils/concurrency.py` | 15 | 全局并发限制 |
+| `src/utils/message_converter.py` | 207 | 消息转换 |
+| `src/utils/concurrency.py` | 15 | 并发限制 |
 | `src/models/*.py` | 82 | 数据模型 |
-| `tests/` | 852 | 12个测试文件 |
+| `tests/` | ~850 | 11 个测试文件 |
 
-**测试**: 26 个用例全部通过
+**测试**: 30 个用例全部通过
 
 ---
 
 ## 下一步
 
-**P0 - 核心 API**:
-1. 步骤 2.3：`/v1/chat/completions`（非流式）
-2. 步骤 2.4：`/v1/chat/completions`（流式）
-3. 步骤 2.5：`/v1/models`
+**P0 - 验证**:
+1. OpenAI SDK 兼容性测试
+2. 端到端测试
 
-**P1**:
-4. 阶段 3：Anthropic 兼容接口
+**P1 - 生产化**:
+3. 日志系统
+4. Docker 配置
+5. README 文档
+
+**P2 - 扩展**:
+4. 阶段 3: Anthropic 兼容接口
 
 ---
 
