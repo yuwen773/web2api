@@ -14,16 +14,32 @@ def response_request_to_chat_request(req: ResponseRequest) -> ChatCompletionRequ
     转换映射:
     - input (string) -> messages[0].content
     - input ({"str": "..."}) -> messages[0].content  (Codex 兼容)
-    - input ([{"type": "text", "text": "..."}]) -> messages[0].content
-    - instructions -> messages[0].role="system"
+    - input ([ResponseInputItem, ...]) -> 合并文本内容（旧格式）
+    - input ([message, ...]) -> 提取最后的用户消息（Codex 消息格式）
+    - instructions -> messages[0].role="system"（仅非 Codex 请求）
     - temperature -> temperature
     - max_tokens -> max_tokens
     - stream -> stream
+
+    注意: Codex 请求的消息数组格式会被特殊处理：
+    - 过滤掉 role="developer" 的系统消息
+    - 只提取最后的用户消息内容
+    - instructions 不发送给上游 API（Codex 本地使用）
     """
     messages: list[ChatMessage] = []
 
-    # 添加系统消息（如果有）
-    if req.instructions:
+    # 判断是否为 Codex 消息数组格式
+    # 通过检查是否有 role 字段来区分
+    is_codex_message_format = False
+    if isinstance(req.input, list) and len(req.input) > 0:
+        first_item = req.input[0]
+        if isinstance(first_item, dict):
+            is_codex_message_format = "role" in first_item
+        else:
+            is_codex_message_format = hasattr(first_item, "role")
+
+    # 添加系统消息（仅非 Codex 格式）
+    if req.instructions and not is_codex_message_format:
         messages.append(ChatMessage(role="system", content=req.instructions))
 
     # 处理 input
@@ -36,26 +52,65 @@ def response_request_to_chat_request(req: ResponseRequest) -> ChatCompletionRequ
         else:
             messages.append(ChatMessage(role="user", content=""))
     elif isinstance(req.input, list):
-        # 合并所有文本输入项
-        text_parts = []
-        for item in req.input:
-            # 兼容 ResponseInputItem 对象和字典格式
-            if isinstance(item, dict):
-                item_type = item.get("type")
-                item_text = item.get("text")
-                item_image_url = item.get("image_url")
-            else:
-                item_type = getattr(item, "type", None)
-                item_text = getattr(item, "text", None)
-                item_image_url = getattr(item, "image_url", None)
+        if is_codex_message_format:
+            # 处理 Codex 消息数组格式
+            # 过滤掉 developer 角色的系统消息，提取最后的用户消息
+            last_user_message = ""
 
-            if item_type == "text" and item_text:
-                text_parts.append(item_text)
-            elif item_type == "image" and item_image_url:
-                # 图像暂不支持，跳过
-                pass
-        if text_parts:
-            messages.append(ChatMessage(role="user", content="\n".join(text_parts)))
+            for item in req.input:
+                if isinstance(item, dict):
+                    item_role = item.get("role")
+                    item_content = item.get("content")
+                else:
+                    item_role = getattr(item, "role", None)
+                    item_content = getattr(item, "content", None)
+
+                # 跳过 developer 消息（Codex 内部使用的权限说明等）
+                if item_role == "developer":
+                    continue
+
+                # 提取用户消息内容
+                if item_role == "user" and isinstance(item_content, list):
+                    # content 是数组格式: [{"type": "input_text", "text": "..."}]
+                    for content_part in item_content:
+                        if isinstance(content_part, dict):
+                            text = content_part.get("text", "")
+                            # 只取 input_text 类型的内容
+                            if content_part.get("type") == "input_text" and text:
+                                last_user_message = text
+                                break
+                        elif text:
+                            last_user_message = str(text)
+                            break
+
+            if last_user_message:
+                messages.append(ChatMessage(role="user", content=last_user_message))
+            else:
+                messages.append(ChatMessage(role="user", content=""))
+        else:
+            # 处理旧的 input_items 格式 (ResponseInputItem)
+            # 合并所有文本输入项
+            text_parts = []
+            for item in req.input:
+                # 兼容 ResponseInputItem 对象和字典格式
+                if isinstance(item, dict):
+                    item_type = item.get("type")
+                    item_text = item.get("text")
+                    item_image_url = item.get("image_url")
+                else:
+                    item_type = getattr(item, "type", None)
+                    item_text = getattr(item, "text", None)
+                    item_image_url = getattr(item, "image_url", None)
+
+                if item_type == "text" and item_text:
+                    text_parts.append(item_text)
+                elif item_type == "image" and item_image_url:
+                    # 图像暂不支持，跳过
+                    pass
+            if text_parts:
+                messages.append(ChatMessage(role="user", content="\n".join(text_parts)))
+            else:
+                messages.append(ChatMessage(role="user", content=""))
     else:
         # 默认情况：添加空用户消息
         messages.append(ChatMessage(role="user", content=""))

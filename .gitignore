@@ -63,3 +63,5 @@ htmlcov/
 
 # Config files (may contain sensitive data)
 config/config.yaml
+
+reference/
