@@ -7,6 +7,11 @@ from .anthropic_request import (
 )
 from .openai_request import ChatCompletionRequest, ChatMessage
 from .openai_response import ChatCompletionResponse, Choice, Usage
+from .responses_request import (
+    ResponseInputItem,
+    ResponseRequest,
+    ResponseTool,
+)
 
 
 __all__ = [
@@ -22,4 +27,7 @@ __all__ = [
     "LoginResponse",
     "TokenData",
     "Usage",
+    "ResponseInputItem",
+    "ResponseRequest",
+    "ResponseTool",
 ]
