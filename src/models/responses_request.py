@@ -30,7 +30,8 @@ class ResponseTool(BaseModel):
     strict: Optional[bool] = None  # OpenAI 2025+ 支持，用于强制模型遵守 schema
     format: Any = None  # 可能是字符串、null 或其他类型
 
-    model_config = ConfigDict(extra="forbid")
+    # 移除 extra="forbid"，使用 ignore 自动忽略未知字段（如 external_web_access 等）
+    model_config = ConfigDict(extra="ignore")
 
 
 class ResponseRequest(BaseModel):
