@@ -8,6 +8,11 @@ from src.models.responses_request import (
     ResponseRequest,
     ResponseTool,
 )
+from src.models.responses_response import (
+    ResponseObject,
+    ResponseOutputItem,
+    ResponseUsage,
+)
 
 
 def test_response_request_minimal() -> None:
@@ -284,3 +289,122 @@ def test_response_request_with_string_input() -> None:
         input="Hello, how are you?",
     )
     assert request.input == "Hello, how are you?"
+
+
+def test_response_usage() -> None:
+    """测试使用量统计模型"""
+    usage = ResponseUsage(
+        prompt_tokens=10,
+        completion_tokens=20,
+        total_tokens=30,
+    )
+    assert usage.prompt_tokens == 10
+    assert usage.completion_tokens == 20
+    assert usage.total_tokens == 30
+
+
+def test_response_output_item_text() -> None:
+    """测试文本输出项"""
+    item = ResponseOutputItem(type="text", text="Hello, world!")
+    assert item.type == "text"
+    assert item.text == "Hello, world!"
+    assert item.tool_use_id is None
+    assert item.name is None
+    assert item.arguments is None
+
+
+def test_response_output_item_tool_call() -> None:
+    """测试工具调用输出项"""
+    item = ResponseOutputItem(
+        type="tool_call",
+        tool_use_id="call_123",
+        name="get_weather",
+        arguments='{"location": "New York"}',
+    )
+    assert item.type == "tool_call"
+    assert item.tool_use_id == "call_123"
+    assert item.name == "get_weather"
+    assert item.arguments == '{"location": "New York"}'
+    assert item.text is None
+
+
+def test_response_object_completed() -> None:
+    """测试完成的响应对象"""
+    response = ResponseObject(
+        id="resp_abc123",
+        created=1234567890,
+        model="gpt-4.1-mini",
+        status="completed",
+        output=[
+            ResponseOutputItem(type="text", text="Hello!"),
+        ],
+        usage=ResponseUsage(
+            prompt_tokens=10,
+            completion_tokens=5,
+            total_tokens=15,
+        ),
+    )
+    assert response.id == "resp_abc123"
+    assert response.object == "response"
+    assert response.created == 1234567890
+    assert response.model == "gpt-4.1-mini"
+    assert response.status == "completed"
+    assert len(response.output) == 1
+    assert response.output[0].text == "Hello!"
+    assert response.usage.total_tokens == 15
+    assert response.error is None
+
+
+def test_response_object_failed() -> None:
+    """测试失败的响应对象"""
+    response = ResponseObject(
+        id="resp_error",
+        created=1234567890,
+        model="gpt-4.1-mini",
+        status="failed",
+        output=[],
+        usage=ResponseUsage(
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+        ),
+        error={"message": "Internal server error", "code": "server_error"},
+    )
+    assert response.status == "failed"
+    assert response.error is not None
+    assert response.error["message"] == "Internal server error"
+    assert response.error["code"] == "server_error"
+
+
+def test_response_usage_negative_tokens_invalid() -> None:
+    """测试负数令牌验证"""
+    with pytest.raises(ValidationError):
+        ResponseUsage(
+            prompt_tokens=-1,
+            completion_tokens=10,
+            total_tokens=9,
+        )
+
+    with pytest.raises(ValidationError):
+        ResponseUsage(
+            prompt_tokens=10,
+            completion_tokens=-5,
+            total_tokens=5,
+        )
+
+
+def test_response_object_invalid_status() -> None:
+    """测试无效状态验证"""
+    with pytest.raises(ValidationError):
+        ResponseObject(
+            id="resp_123",
+            created=1234567890,
+            model="gpt-4.1-mini",
+            status="invalid_status",
+            output=[],
+            usage=ResponseUsage(
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+            ),
+        )

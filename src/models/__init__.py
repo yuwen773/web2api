@@ -12,6 +12,11 @@ from .responses_request import (
     ResponseRequest,
     ResponseTool,
 )
+from .responses_response import (
+    ResponseObject,
+    ResponseOutputItem,
+    ResponseUsage,
+)
 
 
 __all__ = [
@@ -30,4 +35,7 @@ __all__ = [
     "ResponseInputItem",
     "ResponseRequest",
     "ResponseTool",
+    "ResponseObject",
+    "ResponseOutputItem",
+    "ResponseUsage",
 ]
