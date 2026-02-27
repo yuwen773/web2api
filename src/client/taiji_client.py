@@ -79,38 +79,49 @@ class TaijiClient:
         return f"{self.base_url}{CHAT_REFERER_PATH}"
 
     async def login(self, account: str, password: str) -> str:
-        payload = LoginRequest(account=account, password=password).model_dump()
-        payload["captchaId"] = ""
+        account_hint = self._mask_account(account)
+        logger.info("Taiji login started for account=%s", account_hint)
 
-        response = await self._request(
-            "POST",
-            "/api/user/login",
-            json_payload=payload,
-            headers=self._headers(
-                accept="application/json, text/plain, */*",
-                content_type="application/json",
-                referer=f"{self.base_url}/auth",
-                origin=self.base_url,
-            ),
-            retry_on_401=False,
-        )
-        body = self._extract_body(response)
-        parsed = LoginResponse.model_validate(body)
-        if parsed.code != 0 or parsed.data is None or not parsed.data.token:
-            raise TaijiAPIError(
-                parsed.msg or "Taiji login failed.",
-                code=parsed.code,
-                status_code=response.status_code,
+        try:
+            payload = LoginRequest(account=account, password=password).model_dump()
+            payload["captchaId"] = ""
+
+            response = await self._request(
+                "POST",
+                "/api/user/login",
+                json_payload=payload,
+                headers=self._headers(
+                    accept="application/json, text/plain, */*",
+                    content_type="application/json",
+                    referer=f"{self.base_url}/auth",
+                    origin=self.base_url,
+                ),
+                retry_on_401=False,
             )
+            body = self._extract_body(response)
+            parsed = LoginResponse.model_validate(body)
+            if parsed.code != 0 or parsed.data is None or not parsed.data.token:
+                raise TaijiAPIError(
+                    parsed.msg or "Taiji login failed.",
+                    code=parsed.code,
+                    status_code=response.status_code,
+                )
 
-        self.token = parsed.data.token
-        self._account = account
-        self._password = password
-        self._client.headers["authorization"] = self._authorization_header()
-        self.server_name_session = (
-            self._client.cookies.get("server_name_session")
-            or response.cookies.get("server_name_session")
-        )
+            self.token = parsed.data.token
+            self._account = account
+            self._password = password
+            self._client.headers["authorization"] = self._authorization_header()
+            self.server_name_session = (
+                self._client.cookies.get("server_name_session")
+                or response.cookies.get("server_name_session")
+            )
+        except TaijiAPIError as exc:
+            logger.error("Taiji login failed for account=%s: %s", account_hint, exc)
+            raise
+
+        logger.info("Taiji login succeeded for account=%s", account_hint)
+        if self.token is None:
+            raise TaijiAPIError("Taiji login failed to produce a token.")
         return self.token
 
     async def get_models(self) -> list[dict[str, str]]:
@@ -531,3 +542,10 @@ class TaijiClient:
         if isinstance(value, str) and value.lstrip("-").isdigit():
             return int(value)
         return None
+
+    @staticmethod
+    def _mask_account(account: str) -> str:
+        normalized = account.strip()
+        if len(normalized) <= 4:
+            return "***"
+        return f"{normalized[:2]}***{normalized[-2:]}"

@@ -13,8 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.api.anthropic import router as anthropic_router
 from src.api.openai import router as openai_router
 from src.client.taiji_client import TaijiClient
+from src.middleware import RequestContextAndErrorMiddleware
+from src.utils.logging_config import configure_logging
 
 
+configure_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -67,6 +70,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.add_middleware(RequestContextAndErrorMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
