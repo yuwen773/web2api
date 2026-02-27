@@ -30,9 +30,12 @@ web2api/
 │   │   ├── logging_config.py    # 日志配置
 │   │   └── request_context.py   # 请求上下文
 │   └── models/                  # Pydantic 模型
-├── tests/                       # 39 个测试用例
+├── tests/                       # 21 个测试文件
 │   ├── sdk_openai_compat.py     # OpenAI SDK 联调
-│   └── sdk_anthropic_compat.py  # Anthropic SDK 联调
+│   ├── sdk_anthropic_compat.py  # Anthropic SDK 联调
+│   ├── sdk_context_isolation.py # 上下文隔离测试
+│   ├── locustfile_openai.py     # Locust 压测任务
+│   └── run_stress_matrix.py     # 压测矩阵执行
 ├── config/config.yaml
 ├── Dockerfile
 └── docker-compose.yml
@@ -84,6 +87,15 @@ SDK → FastAPI → message_converter → TaijiClient → 上游
 | 日志追踪 | `request_id` 贯穿日志与错误响应 |
 | 认证容错 | 401 自动重登并重试 |
 | SDK 兼容 | OpenAI base_url 需 `/v1`，Anthropic 不需要 |
+
+---
+
+## 测试覆盖
+
+- **单元测试**: 39+ 个测试用例
+- **SDK 兼容**: OpenAI/Anthropic 官方 SDK
+- **上下文隔离**: 并发对话无串线
+- **压力测试**: Locust 矩阵 (5/10/20 并发)
 
 ---
 
