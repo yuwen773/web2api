@@ -77,12 +77,12 @@ def chat_response_to_response_object(
     model: str,
     chat_resp: dict[str, Any],
 ) -> dict[str, Any]:
-    """将 Chat Completions 响应转换为 Responses 响应
+    """将 Chat Completions 响应转换为 Codex Responses API 响应格式
 
-    转换映射:
-    - choices[0].message.content -> output[0].text
-    - 新增 status="completed"
-    - object 从 "chat.completion" 改为 "response"
+    Codex 期望的格式:
+    - created_at (不是 created)
+    - output 是 message 数组，每个 message 有 content 数组
+    - content 使用 output_text 类型
     """
     content = ""
     if chat_resp.get("choices") and len(chat_resp["choices"]) > 0:
@@ -90,18 +90,32 @@ def chat_response_to_response_object(
         content = message.get("content") or ""
 
     usage = chat_resp.get("usage", {})
+    resp_id = chat_resp.get("id", "")
+    created = chat_resp.get("created", 0)
+
+    # 生成 message ID
+    import uuid
+    msg_id = f"msg_{uuid.uuid4().hex}"
 
     output = []
     if content:
         output.append({
-            "type": "text",
-            "text": content
+            "id": msg_id,
+            "type": "message",
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "output_text",
+                    "text": content,
+                    "annotations": []
+                }
+            ]
         })
 
     return {
-        "id": f"resp-{chat_resp['id'].replace('chatcmpl-', '')}",
+        "id": f"resp-{resp_id.replace('chatcmpl-', '')}",
         "object": "response",
-        "created": chat_resp.get("created", 0),
+        "created_at": created,
         "model": model,
         "status": "completed",
         "output": output,
@@ -110,4 +124,7 @@ def chat_response_to_response_object(
             "completion_tokens": usage.get("completion_tokens", 0),
             "total_tokens": usage.get("total_tokens", 0),
         },
+        "error": None,
+        "incomplete_details": None,
+        "metadata": {}
     }

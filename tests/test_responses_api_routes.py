@@ -96,8 +96,11 @@ async def test_responses_create_non_stream_basic() -> None:
     assert body["object"] == "response"
     assert body["model"] == "gpt-4.1-mini"
     assert body["status"] == "completed"
-    assert body["output"][0]["type"] == "text"
-    assert body["output"][0]["text"] == "hello from taiji"
+    # Codex 格式: output 是 message 数组
+    assert body["output"][0]["type"] == "message"
+    assert body["output"][0]["role"] == "assistant"
+    assert body["output"][0]["content"][0]["type"] == "output_text"
+    assert body["output"][0]["content"][0]["text"] == "hello from taiji"
     assert body["usage"] == {
         "prompt_tokens": 3,
         "completion_tokens": 7,
@@ -131,7 +134,8 @@ async def test_responses_create_with_instructions() -> None:
     body = response.json()
     assert body["object"] == "response"
     assert body["status"] == "completed"
-    assert body["output"][0]["text"] == "hello from taiji"
+    assert body["output"][0]["type"] == "message"
+    assert body["output"][0]["content"][0]["text"] == "hello from taiji"
     assert fake_client.created_models == ["gpt-4.1-mini"]
     assert fake_client.deleted_sessions == [101]
 
@@ -318,5 +322,7 @@ async def test_responses_create_with_codex_str_format() -> None:
     body = response.json()
     assert body["object"] == "response"
     assert body["status"] == "completed"
-    assert body["output"][0]["type"] == "text"
+    assert body["output"][0]["type"] == "message"
+    # 假客户端返回固定的 "hello from taiji"
+    assert body["output"][0]["content"][0]["text"] == "hello from taiji"
     assert fake_client.sent_messages[0]["text"] == "hello from codex"

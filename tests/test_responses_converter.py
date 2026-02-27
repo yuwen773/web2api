@@ -129,12 +129,15 @@ def test_convert_chat_response_to_response_object() -> None:
 
     assert resp["id"] == "resp-abc123xyz"
     assert resp["object"] == "response"
-    assert resp["created"] == 1234567890
+    assert resp["created_at"] == 1234567890  # Codex 使用 created_at
     assert resp["model"] == "gpt-4.1-mini"
     assert resp["status"] == "completed"
     assert len(resp["output"]) == 1
-    assert resp["output"][0]["type"] == "text"
-    assert resp["output"][0]["text"] == "Hello! How can I help you today?"
+    # Codex 格式: output 是 message 数组
+    assert resp["output"][0]["type"] == "message"
+    assert resp["output"][0]["role"] == "assistant"
+    assert resp["output"][0]["content"][0]["type"] == "output_text"
+    assert resp["output"][0]["content"][0]["text"] == "Hello! How can I help you today?"
     assert resp["usage"]["prompt_tokens"] == 10
     assert resp["usage"]["completion_tokens"] == 9
     assert resp["usage"]["total_tokens"] == 19
