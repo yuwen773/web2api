@@ -7,6 +7,8 @@
 - OpenAI 兼容接口
   - `POST /v1/chat/completions`（支持流式和非流式）
   - `GET /v1/models`
+- OpenAI Responses API 接口
+  - `POST /v1/responses`（支持流式和非流式）
 - Anthropic 兼容接口
   - `POST /v1/messages`（支持流式和非流式）
 - 每次请求创建独立会话，完成后自动删除，避免上下文串线
@@ -91,6 +93,30 @@ curl http://localhost:8000/v1/messages \
   -H "Content-Type: application/json" \
   -H "x-api-key: any" \
   -d "{\"model\":\"claude-opus-4-6\",\"max_tokens\":1024,\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}"
+```
+
+### OpenAI Responses API 非流式
+
+```bash
+curl http://localhost:8000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d "{\"model\":\"gpt-4.1-mini\",\"input\":\"hello\"}"
+```
+
+### OpenAI Responses API 流式
+
+```bash
+curl http://localhost:8000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d "{\"model\":\"gpt-4.1-mini\",\"stream\":true,\"input\":\"hello\"}"
+```
+
+### OpenAI Responses API 带指令
+
+```bash
+curl http://localhost:8000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d "{\"model\":\"gpt-4.1-mini\",\"input\":\"hello\",\"instructions\":\"You are a helpful assistant.\"}"
 ```
 
 ## 配置说明
