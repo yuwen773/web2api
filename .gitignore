@@ -60,3 +60,6 @@ htmlcov/
 
 # Session files (may contain sensitive data)
 *.session
+
+# Config files (may contain sensitive data)
+config/config.yaml

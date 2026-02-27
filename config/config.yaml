@@ -1,7 +1,7 @@
 taiji:
   api_base: https://ai.aurod.cn
-  account: 18103656485
-  password: Lyangfan0912.
+  account: your_taiji_account
+  password: your_taiji_password
   app_version: 2.14.0
 
 server:
