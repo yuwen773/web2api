@@ -19,6 +19,7 @@ class ResponseTool(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     parameters: Optional[dict[str, Any]] = None
+    strict: Optional[bool] = None  # OpenAI 2025+ 支持，用于强制模型遵守 schema
 
     model_config = ConfigDict(extra="forbid")
 
