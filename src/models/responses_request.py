@@ -49,6 +49,7 @@ class ResponseRequest(BaseModel):
     tools: Optional[list[ResponseTool]] = None
     tool_choice: Optional[Union[str, dict[str, Any]]] = "auto"
     parallel_tool_calls: Optional[bool] = None  # 是否允许并行调用工具
+    store: Optional[bool] = None  # 是否存储对话
     stream: bool = False
     temperature: Optional[float] = Field(default=None, ge=0, le=2)
     top_p: Optional[float] = Field(default=None, ge=0, le=1)
@@ -56,4 +57,5 @@ class ResponseRequest(BaseModel):
     previous_response_id: Optional[str] = None
     reasoning: Optional[dict[str, Any]] = None
 
-    model_config = ConfigDict(extra="forbid")
+    # 使用 ignore 自动忽略未知字段，兼容 Codex 扩展字段
+    model_config = ConfigDict(extra="ignore")
