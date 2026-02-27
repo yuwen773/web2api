@@ -367,6 +367,15 @@ async def responses_create(
     将 Responses 格式请求转换为 Chat Completions 格式，
     复用现有 Taiji 客户端调用逻辑。
     """
+    # 调试日志：打印原始请求体
+    import json
+    body = await request.body()
+    logger.info("=== /v1/responses DEBUG ===")
+    logger.info("Raw body: %s", body.decode("utf-8"))
+    logger.info("Parsed input type: %s", type(request_body.input))
+    logger.info("Parsed input value: %s", request_body.input)
+    logger.info("==========================")
+
     taiji_client = _get_taiji_client(request)
 
     # 转换为 Chat Completions 格式
