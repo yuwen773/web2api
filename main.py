@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import uvicorn
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,43 +12,29 @@ from src.api.anthropic import router as anthropic_router
 from src.api.openai import router as openai_router
 from src.client.taiji_client import TaijiClient
 from src.middleware import RequestContextAndErrorMiddleware
+from src.utils.concurrency import configure_semaphore
 from src.utils.logging_config import configure_logging
+from src.utils.settings import load_settings
 
 
 configure_logging()
 logger = logging.getLogger(__name__)
 
 
-def _get_env(name: str, default: str | None = None) -> str | None:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    value = value.strip()
-    return value if value else default
-
-
-def _get_env_int(name: str, default: int) -> int:
-    raw = _get_env(name)
-    if raw is None:
-        return default
-    try:
-        return int(raw)
-    except ValueError as exc:
-        raise ValueError(f"Environment variable {name} must be an integer.") from exc
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    load_dotenv(override=False)
+    settings = load_settings()
+    configure_semaphore(settings.max_concurrent)
+    logger.info("Configured max_concurrent=%s", settings.max_concurrent)
 
     taiji_client = TaijiClient(
-        base_url=_get_env("TAIJI_API_BASE", "https://ai.aurod.cn") or "https://ai.aurod.cn",
-        app_version=_get_env("TAIJI_APP_VERSION", "2.14.0") or "2.14.0",
+        base_url=settings.taiji_api_base,
+        app_version=settings.taiji_app_version,
     )
     app.state.taiji_client = taiji_client
 
-    account = _get_env("TAIJI_ACCOUNT")
-    password = _get_env("TAIJI_PASSWORD")
+    account = settings.taiji_account
+    password = settings.taiji_password
     if account and password:
         await taiji_client.login(account, password)
         logger.info("Taiji client logged in during startup.")
@@ -91,9 +75,10 @@ async def health_check() -> dict[str, str]:
 
 
 if __name__ == "__main__":
+    settings = load_settings()
     uvicorn.run(
         "main:app",
-        host=_get_env("WEB2API_HOST", "0.0.0.0") or "0.0.0.0",
-        port=_get_env_int("WEB2API_PORT", 8000),
+        host=settings.server_host,
+        port=settings.server_port,
         reload=False,
     )

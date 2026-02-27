@@ -1,0 +1,16 @@
+.git
+.gitignore
+.venv
+__pycache__
+.pytest_cache
+.vscode
+memory-bank
+crawler
+tests
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.md
+!.env.example
+!README.md

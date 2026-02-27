@@ -1,0 +1,14 @@
+services:
+  web2api:
+    build: .
+    environment:
+      - TAIJI_API_BASE=${TAIJI_API_BASE:-https://ai.aurod.cn}
+      - TAIJI_ACCOUNT=${TAIJI_ACCOUNT}
+      - TAIJI_PASSWORD=${TAIJI_PASSWORD}
+      - TAIJI_APP_VERSION=${TAIJI_APP_VERSION:-2.14.0}
+      - MAX_CONCURRENT=${MAX_CONCURRENT:-5}
+      - WEB2API_HOST=0.0.0.0
+      - WEB2API_PORT=8000
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
