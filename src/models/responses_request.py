@@ -14,8 +14,16 @@ class ResponseInputItem(BaseModel):
 
 
 class ResponseTool(BaseModel):
-    """Responses API 工具定义"""
-    type: str = Field(..., pattern="^(function|web_search|file_search)$")
+    """Responses API 工具定义
+
+    支持的工具类型:
+    - function: 函数调用
+    - code_interpreter: 代码解释器
+    - retrieval: 检索
+    - web_search: 网络搜索
+    - file_search: 文件搜索
+    """
+    type: str = Field(..., pattern="^(function|code_interpreter|retrieval|web_search|file_search)$")
     name: Optional[str] = None
     description: Optional[str] = None
     parameters: Optional[dict[str, Any]] = None
