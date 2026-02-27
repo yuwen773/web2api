@@ -178,27 +178,21 @@ async def test_responses_create_stream_returns_events() -> None:
 
     payloads = [json.loads(line[6:]) for line in sse_lines]
 
-    # First event should be response.created
+    # First event should be response.created (only contains id)
     assert payloads[0]["type"] == "response.created"
-    assert payloads[0]["response"]["status"] == "in_progress"
     assert "id" in payloads[0]["response"]
 
-    # Second event should be response.output_item.added
-    assert payloads[1]["type"] == "response.output_item.added"
-    assert payloads[1]["item"]["type"] == "text"
+    # Second event should be response.output_item.done with full message
+    assert payloads[1]["type"] == "response.output_item.done"
+    assert payloads[1]["item"]["type"] == "message"
+    assert payloads[1]["item"]["role"] == "assistant"
+    assert payloads[1]["item"]["content"][0]["type"] == "output_text"
+    assert payloads[1]["item"]["content"][0]["text"] == "Hello"
 
-    # Content events should be response.delta
-    content = "".join(
-        payload["delta"]["text"]
-        for payload in payloads
-        if payload["type"] == "response.delta"
-    )
-    assert content == "Hello"
-
-    # Last events should be completion events
-    assert payloads[-2]["type"] == "response.output_item.done"
-    assert payloads[-1]["type"] == "response.done"
-    assert payloads[-1]["response"]["status"] == "completed"
+    # Last event should be response.completed (not response.done)
+    assert payloads[-1]["type"] == "response.completed"
+    assert "usage" in payloads[-1]["response"]
+    assert "total_tokens" in payloads[-1]["response"]["usage"]
 
     assert fake_client.deleted_sessions == [101]
     assert fake_client.sent_messages[0]["stream"] is True

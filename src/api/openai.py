@@ -442,32 +442,29 @@ async def _responses_stream(
         )
 
     response_id = f"resp-{uuid4().hex}"
+    message_id = f"msg_{uuid4().hex}"
     created = int(time.time())
+
+    # 收集所有文本内容
+    collected_text = []
 
     async def stream_generator() -> AsyncIterator[str]:
         try:
-            # 发送 response.created 事件
+            # 1. 发送 response.created 事件
             yield _format_sse({
                 "type": "response.created",
                 "response": {
                     "id": response_id,
-                    "created": created,
-                    "model": model,
-                    "status": "in_progress",
                 }
             })
 
-            # 发送输出项添加事件
-            yield _format_sse({
-                "type": "response.output_item.added",
-                "item": {"type": "text", "index": 0}
-            })
-
+            # 2. 收集所有文本块
             # 处理第一个 chunk
             for chunk in (first_chunk,):
-                payload = _chunk_to_response_delta(chunk)
-                if payload:
-                    yield _format_sse(payload)
+                if chunk.get("type") == "string":
+                    text = str(chunk.get("data") or "")
+                    if text:
+                        collected_text.append(text)
 
             # 处理后续 chunks
             async for chunk in stream:
@@ -477,20 +474,47 @@ async def _responses_stream(
                         code=_to_int(chunk.get("code")),
                         status_code=400,
                     )
-                payload = _chunk_to_response_delta(chunk)
-                if payload:
-                    yield _format_sse(payload)
+                if chunk.get("type") == "string":
+                    text = str(chunk.get("data") or "")
+                    if text:
+                        collected_text.append(text)
 
-            # 发送完成事件
+            # 3. 获取 token 使用情况（从最后一个 object 类型的 chunk）
+            # Taiji 最后会发送一个 object 类型的 chunk 包含 token 信息
+            # 但由于我们已经流式处理了，这里使用估算值
+            full_text = "".join(collected_text)
+            input_tokens = len(chat_request.messages[0].content) if chat_request.messages else 0
+            output_tokens = len(full_text)
+            total_tokens = input_tokens + output_tokens
+
+            # 4. 发送 response.output_item.done 事件（包含完整消息）
             yield _format_sse({
                 "type": "response.output_item.done",
-                "item": {"type": "text", "index": 0}
+                "item": {
+                    "type": "message",
+                    "role": "assistant",
+                    "id": message_id,
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": full_text,
+                        }
+                    ],
+                }
             })
+
+            # 5. 发送 response.completed 事件（包含 usage）
             yield _format_sse({
-                "type": "response.done",
+                "type": "response.completed",
                 "response": {
                     "id": response_id,
-                    "status": "completed",
+                    "usage": {
+                        "input_tokens": input_tokens,
+                        "input_tokens_details": None,
+                        "output_tokens": output_tokens,
+                        "output_tokens_details": None,
+                        "total_tokens": total_tokens,
+                    },
                 }
             })
         except asyncio.CancelledError:
@@ -510,20 +534,3 @@ async def _responses_stream(
     )
 
 
-def _chunk_to_response_delta(chunk: dict[str, Any]) -> dict[str, Any] | None:
-    """将 Taiji chunk 转换为 response.delta 事件"""
-    if chunk.get("type") != "string":
-        return None
-
-    content = chunk.get("data")
-    if content is None:
-        return None
-
-    text = str(content)
-    if not text:
-        return None
-
-    return {
-        "type": "response.delta",
-        "delta": {"type": "text", "text": text}
-    }

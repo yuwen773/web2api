@@ -139,19 +139,24 @@ def test_response_tool_file_search() -> None:
     assert tool.type == "file_search"
 
 
-def test_response_request_extra_fields_forbidden() -> None:
-    """测试禁止额外字段"""
-    # ResponseInputItem
-    with pytest.raises(ValidationError):
-        ResponseInputItem(type="text", text="Hello", extra_field="not_allowed")
+def test_response_request_extra_fields_ignored() -> None:
+    """测试额外字段被忽略（Codex 兼容）"""
+    # ResponseInputItem - 额外字段应该被忽略
+    item = ResponseInputItem(type="text", text="Hello", extra_field="not_allowed")
+    assert item.type == "text"
+    assert item.text == "Hello"
+    assert not hasattr(item, "extra_field")  # 额外字段不在模型中
 
-    # ResponseTool
-    with pytest.raises(ValidationError):
-        ResponseTool(type="function", name="test", extra_field="not_allowed")
+    # ResponseTool - 额外字段应该被忽略
+    tool = ResponseTool(type="function", name="test", extra_field="not_allowed")
+    assert tool.type == "function"
+    assert tool.name == "test"
+    assert not hasattr(tool, "extra_field")
 
-    # ResponseRequest
-    with pytest.raises(ValidationError):
-        ResponseRequest(model="gpt-4.1-mini", unknown_field="not_allowed")
+    # ResponseRequest - 额外字段应该被忽略
+    request = ResponseRequest(model="gpt-4.1-mini", unknown_field="not_allowed")
+    assert request.model == "gpt-4.1-mini"
+    assert not hasattr(request, "unknown_field")
 
 
 def test_response_request_top_p_validation() -> None:
@@ -241,21 +246,27 @@ def test_response_request_tool_choice_variants() -> None:
     assert request.tool_choice["name"] == "get_weather"
 
 
-def test_response_input_item_invalid_type() -> None:
-    """测试无效的输入项类型"""
-    with pytest.raises(ValidationError):
-        ResponseInputItem(type="invalid", text="Hello")
+def test_response_input_item_any_type_accepted() -> None:
+    """测试输入项类型接受任意值（Codex 兼容）"""
+    # 应该接受任意类型的字符串
+    item = ResponseInputItem(type="invalid", text="Hello")
+    assert item.type == "invalid"
+    assert item.text == "Hello"
 
 
-def test_response_tool_invalid_type() -> None:
-    """测试无效的工具类型"""
-    with pytest.raises(ValidationError):
-        ResponseTool(type="invalid_tool")
+def test_response_tool_any_type_accepted() -> None:
+    """测试工具类型接受任意值（Codex 兼容）"""
+    # 应该接受任意类型的字符串
+    tool = ResponseTool(type="invalid_tool")
+    assert tool.type == "invalid_tool"
+
+    tool = ResponseTool(type="custom_tool")
+    assert tool.type == "custom_tool"
 
 
-def test_response_request_instructions_max_length() -> None:
-    """测试指令最大长度限制"""
-    # 正常长度
+def test_response_request_instructions_no_max_length() -> None:
+    """测试指令没有最大长度限制（Codex 兼容）"""
+    # 应该接受任意长度的指令
     long_instructions = "a" * 8000
     request = ResponseRequest(
         model="gpt-4.1-mini",
@@ -263,12 +274,13 @@ def test_response_request_instructions_max_length() -> None:
     )
     assert len(request.instructions) == 8000
 
-    # 超出最大长度
-    with pytest.raises(ValidationError):
-        ResponseRequest(
-            model="gpt-4.1-mini",
-            instructions="a" * 8001,
-        )
+    # 更长的指令也应该被接受
+    very_long_instructions = "a" * 100000
+    request = ResponseRequest(
+        model="gpt-4.1-mini",
+        instructions=very_long_instructions,
+    )
+    assert len(request.instructions) == 100000
 
 
 def test_response_request_model_min_length() -> None:

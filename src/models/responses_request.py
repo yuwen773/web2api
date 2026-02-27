@@ -5,12 +5,15 @@ from typing import Any, Literal, Optional, Union
 
 
 class ResponseInputItem(BaseModel):
-    """Responses API 输入项，支持文本/图像"""
-    type: str = Field(default="text", pattern="^(text|image)$")
+    """Responses API 输入项，支持文本/图像
+
+    Codex 兼容：使用 extra="ignore" 忽略未知字段
+    """
+    type: str = Field(default="text")  # 移除 pattern 限制，接受任意类型
     text: Optional[str] = None
     image_url: Optional[str] = None
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
 
 class ResponseTool(BaseModel):
