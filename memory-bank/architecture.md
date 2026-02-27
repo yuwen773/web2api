@@ -4,22 +4,24 @@
 
 ```
 web2api/
-├── main.py                      # FastAPI 入口 (93 行)
+├── main.py                      # FastAPI 入口 (95 行)
 │
 ├── src/
 │   ├── api/
-│   │   └── openai.py            # OpenAI 路由 (353 行)
+│   │   ├── openai.py            # OpenAI 路由 (353 行)
+│   │   └── anthropic.py         # Anthropic 路由 (404 行)
 │   ├── client/
 │   │   └── taiji_client.py      # TaijiClient 类 (534 行)
 │   ├── utils/
-│   │   ├── message_converter.py # OpenAI → 太极AI 转换 (207 行)
-│   │   └── concurrency.py       # 全局并发限制 (15 行)
+│   │   ├── message_converter.py # 消息转换 (207 行)
+│   │   └── concurrency.py       # 并发限制 (15 行)
 │   └── models/
-│       ├── auth.py              # 认证模型 (28 行)
-│       ├── openai_request.py    # OpenAI 请求模型 (21 行)
-│       └── openai_response.py   # OpenAI 响应模型 (33 行)
+│       ├── auth.py              # 认证模型
+│       ├── openai_request.py    # OpenAI 请求模型
+│       ├── openai_response.py   # OpenAI 响应模型
+│       └── anthropic_request.py # Anthropic 请求模型
 │
-├── tests/                       # 11 个测试文件，30 个用例
+├── tests/                       # 13 个测试文件，33 个用例
 ├── config/config.yaml           # 配置文件
 └── memory-bank/                 # 项目知识库
 ```
@@ -28,20 +30,21 @@ web2api/
 
 ## API 端点
 
-| 端点 | 方法 | 功能 | 状态 |
+| 格式 | 端点 | 方法 | 功能 |
 |------|------|------|------|
-| `/` | GET | 健康检查 | ✅ |
-| `/v1/chat/completions` | POST | 聊天完成 (非流式+流式) | ✅ |
-| `/v1/models` | GET | 模型列表 | ✅ |
+| OpenAI | `/v1/chat/completions` | POST | 聊天完成 |
+| OpenAI | `/v1/models` | GET | 模型列表 |
+| Anthropic | `/v1/messages` | POST | 消息接口 |
+| 通用 | `/` | GET | 健康检查 |
 
 ---
 
 ## 核心流程
 
 ```
-客户端请求 (OpenAI 格式)
+客户端请求 (OpenAI/Anthropic 格式)
     ↓
-FastAPI 路由 (openai.py)
+FastAPI 路由 (openai.py / anthropic.py)
     ↓
 1. 创建新会话 (create_session)
 2. messages → prompt 转换
@@ -66,15 +69,23 @@ class TaijiClient:
 
 ---
 
-## 太极AI API 端点
+## 数据模型
 
-| 端点 | 用途 |
-|------|------|
-| `POST /api/user/login` | 获取 JWT token |
-| `GET /api/chat/tmpl` | 获取模型列表 |
-| `POST /api/chat/session` | 创建会话 |
-| `DELETE /api/chat/session/{id}` | 删除会话 |
-| `POST /api/chat/completions` | 发送消息 (SSE) |
+### OpenAI
+```python
+# 请求
+ChatCompletionRequest(model, messages, stream=False)
+# 响应
+ChatCompletionResponse(id, created, model, choices, usage)
+```
+
+### Anthropic
+```python
+# 请求
+AnthropicRequest(model, max_tokens, messages, system, stream)
+# 响应
+Message(id, type, role, content, stop_reason, usage)
+```
 
 ---
 
@@ -90,22 +101,10 @@ class TaijiClient:
 
 ---
 
-## OpenAI 数据模型
-
-```python
-# 请求
-ChatCompletionRequest(model, messages, stream=False)
-
-# 响应
-ChatCompletionResponse(id, created, model, choices, usage)
-```
-
----
-
 ## 待实现
 
 | 阶段 | 功能 |
 |------|------|
-| 3 | Anthropic 兼容接口 |
 | 4 | 日志、错误处理、Docker |
 | 5 | SDK 兼容性测试 |
+| 6 | 部署上线 |

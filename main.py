@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.anthropic import router as anthropic_router
 from src.api.openai import router as openai_router
 from src.client.taiji_client import TaijiClient
 
@@ -76,6 +77,7 @@ app.add_middleware(
 )
 
 app.include_router(openai_router)
+app.include_router(anthropic_router)
 
 
 @app.get("/")
