@@ -39,9 +39,19 @@ def response_request_to_chat_request(req: ResponseRequest) -> ChatCompletionRequ
         # 合并所有文本输入项
         text_parts = []
         for item in req.input:
-            if item.type == "text" and item.text:
-                text_parts.append(item.text)
-            elif item.type == "image" and item.image_url:
+            # 兼容 ResponseInputItem 对象和字典格式
+            if isinstance(item, dict):
+                item_type = item.get("type")
+                item_text = item.get("text")
+                item_image_url = item.get("image_url")
+            else:
+                item_type = getattr(item, "type", None)
+                item_text = getattr(item, "text", None)
+                item_image_url = getattr(item, "image_url", None)
+
+            if item_type == "text" and item_text:
+                text_parts.append(item_text)
+            elif item_type == "image" and item_image_url:
                 # 图像暂不支持，跳过
                 pass
         if text_parts:

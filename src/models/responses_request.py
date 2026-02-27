@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, Literal, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Any, Literal, Optional, Union
 
@@ -34,7 +32,7 @@ class ResponseRequest(BaseModel):
     - 列表: [{"type": "text", "text": "hello"}]
     """
     model: str = Field(..., min_length=1)
-    input: Union[str, dict[str, Any], list[ResponseInputItem]] = Field(default="")
+    input: Any = ""  # 使用 Any 接受任何格式，在业务逻辑中处理
     instructions: Optional[str] = Field(default=None, max_length=8000)
     max_tokens: Optional[int] = Field(default=None, gt=0)
     tools: Optional[list[ResponseTool]] = None
