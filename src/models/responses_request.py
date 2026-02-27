@@ -48,6 +48,7 @@ class ResponseRequest(BaseModel):
     max_tokens: Optional[int] = Field(default=None, gt=0)
     tools: Optional[list[ResponseTool]] = None
     tool_choice: Optional[Union[str, dict[str, Any]]] = "auto"
+    parallel_tool_calls: Optional[bool] = None  # 是否允许并行调用工具
     stream: bool = False
     temperature: Optional[float] = Field(default=None, ge=0, le=2)
     top_p: Optional[float] = Field(default=None, ge=0, le=1)
