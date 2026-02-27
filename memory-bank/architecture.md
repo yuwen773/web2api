@@ -4,26 +4,30 @@
 
 ```
 web2api/
+├── main.py                      # FastAPI 入口
+│
 ├── src/
 │   ├── client/
-│   │   └── taiji_client.py      # TaijiClient 类（486行）
+│   │   └── taiji_client.py      # TaijiClient 类（534行）
 │   ├── utils/
-│   │   └── message_converter.py # OpenAI → 太极AI 转换
+│   │   ├── message_converter.py # OpenAI → 太极AI 转换
+│   │   └── concurrency.py       # 全局并发限制
 │   └── models/
-│       └── auth.py              # 认证模型
+│       ├── auth.py              # 认证模型
+│       ├── openai_request.py    # OpenAI 请求模型
+│       └── openai_response.py   # OpenAI 响应模型
 │
-├── tests/                       # 8个测试文件，全部通过
+├── tests/                       # 12个测试文件，26个用例
 ├── config/config.yaml           # 配置文件
-├── crawler/                     # 抓包分析文档（已完成）
 └── memory-bank/                 # 项目知识库
 ```
 
 ---
 
-## 核心流程（阶段 2 设计）
+## 核心流程
 
 ```
-客户端请求 (OpenAI/Anthropic 格式)
+客户端请求 (OpenAI 格式)
     ↓
 FastAPI 路由
     ↓
@@ -40,15 +44,25 @@ FastAPI 路由
 
 ```python
 class TaijiClient:
+    # 上下文管理器
+    async def __aenter__(self) -> TaijiClient
+    async def __aexit__(self, exc_type, exc, tb) -> None
+
+    # 认证
     async def login(account, password) -> str
+
+    # 模型与会话
     async def get_models() -> list[dict]
     async def create_session(model) -> int
     async def delete_session(id) -> dict
-    def send_message(session_id, text, stream) -> dict | AsyncIterator
-    async def close() -> None
-```
 
-**异常**：`TaijiAPIError(code, status_code, message)`
+    # 消息发送（支持 stream=True/False）
+    def send_message(session_id, text, stream) -> dict | AsyncIterator
+
+    # 内部
+    async def _request(...)           # 普通请求，支持401重试
+    async def _relogin()              # 自动重登录
+```
 
 ---
 
@@ -90,12 +104,36 @@ data: [DONE]
 
 ---
 
-## 待实现（阶段 2）
+## 数据模型
 
-| 文件 | 功能 |
-|------|------|
-| `main.py` | FastAPI 入口 |
-| `src/api/openai.py` | OpenAI 兼容路由 |
-| `src/models/openai_request.py` | 请求模型 |
-| `src/models/openai_response.py` | 响应模型 |
-| `src/utils/concurrency.py` | 全局并发限制 |
+### OpenAI 请求
+```python
+ChatCompletionRequest:
+    model: str
+    messages: list[ChatMessage]
+    stream: bool = False
+    temperature: float | None
+    max_tokens: int | None
+```
+
+### OpenAI 响应
+```python
+ChatCompletionResponse:
+    id: str
+    object: str = "chat.completion"
+    created: int
+    model: str
+    choices: list[Choice]
+    usage: Usage
+```
+
+---
+
+## 待实现
+
+| 阶段 | 文件 | 功能 |
+|------|------|------|
+| 2.3-2.4 | `src/api/openai.py` | /v1/chat/completions 路由 |
+| 2.5 | `src/api/openai.py` | /v1/models 端点 |
+| 3 | `src/api/anthropic.py` | Anthropic 兼容接口 |
+| 4 | - | 日志、错误处理、Docker |
