@@ -294,3 +294,29 @@ async def test_responses_create_missing_model() -> None:
         )
 
     assert response.status_code == 422  # Validation error
+
+
+@pytest.mark.asyncio
+async def test_responses_create_with_codex_str_format() -> None:
+    """测试 Codex 兼容格式: input = {"str": "..."}"""
+    fake_client = FakeTaijiClient()
+    app = _build_test_app(fake_client)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/v1/responses",
+            json={
+                "model": "gpt-4.1-mini",
+                "input": {"str": "hello from codex"},
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["object"] == "response"
+    assert body["status"] == "completed"
+    assert body["output"][0]["type"] == "text"
+    assert fake_client.sent_messages[0]["text"] == "hello from codex"

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from src.models.responses_request import ResponseRequest, ResponseInputItem
+from src.models.responses_request import (
+    ResponseRequest,
+    ResponseInputItem,
+    ResponseInputStr,
+)
 from src.models.openai_request import ChatCompletionRequest, ChatMessage
 from typing import Any
 
@@ -10,6 +14,8 @@ def response_request_to_chat_request(req: ResponseRequest) -> ChatCompletionRequ
 
     转换映射:
     - input (string) -> messages[0].content
+    - input ({"str": "..."}) -> messages[0].content  (Codex 兼容)
+    - input ([{"type": "text", "text": "..."}]) -> messages[0].content
     - instructions -> messages[0].role="system"
     - temperature -> temperature
     - max_tokens -> max_tokens
@@ -24,6 +30,9 @@ def response_request_to_chat_request(req: ResponseRequest) -> ChatCompletionRequ
     # 处理 input
     if isinstance(req.input, str):
         messages.append(ChatMessage(role="user", content=req.input))
+    elif isinstance(req.input, ResponseInputStr):
+        # Codex 兼容格式: {"str": "hello"}
+        messages.append(ChatMessage(role="user", content=req.input.str))
     elif isinstance(req.input, list):
         # 合并所有文本输入项
         text_parts = []
