@@ -9,3 +9,4 @@ pytest-asyncio
 aiofiles
 openai
 anthropic
+locust
