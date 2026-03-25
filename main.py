@@ -13,16 +13,19 @@ from src.api.openai import router as openai_router
 from src.client.taiji_client import TaijiClient
 from src.middleware import RequestContextAndErrorMiddleware
 from src.utils.concurrency import configure_semaphore
-from src.utils.logging_config import configure_logging
+from src.utils.logging_config import get_logger, setup_logging
 from src.utils.settings import load_settings
 
 
-configure_logging()
-logger = logging.getLogger(__name__)
+setup_logging()
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # 日志已在模块级别配置，这里确认配置成功
+    logger.info("Logging configured successfully")
+
     settings = load_settings()
     configure_semaphore(settings.max_concurrent)
     logger.info("Configured max_concurrent=%s", settings.max_concurrent)
