@@ -7,9 +7,9 @@ from typing import Any
 from structlog.types import EventDict, Processor
 
 
-def _hide_account(value: str) -> str:
+def _hide_account(value: Any) -> str:
     """隐藏邮箱/账号，保留前2个字符"""
-    if not value or len(value) <= 3:
+    if value is None or not isinstance(value, str) or not value or len(value) <= 3:
         return "***"
     if "@" in value:
         # 邮箱格式: user@domain -> us***@domain
@@ -20,18 +20,18 @@ def _hide_account(value: str) -> str:
     return f"{value[:2]}***"
 
 
-def _hide_token(value: str) -> str:
+def _hide_token(value: Any) -> str:
     """隐藏 token，保留前8个字符"""
-    if len(value) > 8:
-        return f"{value[:8]}***"
-    return "***"
+    if value is None or not isinstance(value, str) or len(value) <= 8:
+        return "***"
+    return f"{value[:8]}***"
 
 
-def _hide_session_id(value: str) -> str:
+def _hide_session_id(value: Any) -> str:
     """隐藏 session_id，保留前6个字符"""
-    if len(value) > 6:
-        return f"{value[:6]}***"
-    return "***"
+    if value is None or not isinstance(value, str) or len(value) <= 6:
+        return "***"
+    return f"{value[:6]}***"
 
 
 class SensitiveFilter:

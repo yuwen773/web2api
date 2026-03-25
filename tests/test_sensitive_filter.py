@@ -79,3 +79,29 @@ def test_multiple_sensitive_fields():
     assert result["token"] == "***"
     assert result["account"] == "***"
     assert result["safe"] == "value"
+
+
+def test_none_values():
+    """测试 None 值的处理"""
+    filter_obj = SensitiveFilter(["token", "password"])
+    event = {"token": None, "password": None}
+    result = filter_obj(None, None, event)
+    assert result["token"] == "***"
+    assert result["password"] == "***"
+
+
+def test_non_string_values():
+    """测试非字符串值的处理"""
+    filter_obj = SensitiveFilter(["token"])
+    event = {"token": 12345, "active": True}
+    result = filter_obj(None, None, event)
+    assert result["token"] == "***"
+    assert result["active"] is True
+
+
+def test_empty_string():
+    """测试空字符串的处理"""
+    filter_obj = SensitiveFilter(["token"])
+    event = {"token": ""}
+    result = filter_obj(None, None, event)
+    assert result["token"] == "***"
