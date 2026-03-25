@@ -46,7 +46,8 @@ class TaijiClient:
         *,
         base_url: str = "https://ai.aurod.cn",
         app_version: str = "2.14.0",
-        timeout: float = 30.0,
+        # Increased timeout for image generation operations
+        timeout: float = 120.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.app_version = app_version
@@ -281,6 +282,12 @@ class TaijiClient:
         async with get_semaphore():
             for attempt in range(2):
                 try:
+                    logger.debug(
+                        "Taiji stream request starting: session_id=%s, text_length=%s, files_count=%s",
+                        session_id,
+                        len(text),
+                        len(files) if files else 0,
+                    )
                     async with self._client.stream(
                         "POST",
                         "/api/chat/completions",
@@ -297,18 +304,40 @@ class TaijiClient:
                             include_auth=True,
                         ),
                     ) as response:
+                        logger.debug(
+                            "Taiji stream response received: status=%s",
+                            response.status_code,
+                        )
+
                         if response.status_code == 401 and attempt == 0:
                             await response.aread()
+                            logger.warning("Taiji stream got 401, relogin and retry")
                             await self._relogin()
                             continue
 
                         if response.status_code >= 400:
-                            await response.aread()
+                            body_text = await response.text()
+                            logger.error(
+                                "Taiji stream HTTP error: status=%s body=%s",
+                                response.status_code,
+                                body_text,
+                            )
                             self._extract_body(response)
                             return
 
+                        lines_received = 0
                         async for raw_line in response.aiter_lines():
                             line = raw_line.strip()
+                            lines_received += 1
+                            if lines_received <= 10:
+                                logger.debug(
+                                    "Taiji stream line[%s]: %s",
+                                    lines_received,
+                                    line[:200] if line else "(empty)",
+                                )
+                            elif lines_received == 11:
+                                logger.debug("Taiji stream: ... (truncating line logs)")
+
                             if not line or not line.startswith("data:"):
                                 continue
 
@@ -316,13 +345,20 @@ class TaijiClient:
                             if not payload:
                                 continue
                             if payload == "[DONE]":
+                                logger.debug("Taiji stream received [DONE], ending")
                                 return
 
                             chunk = self._parse_sse_payload(payload, response.status_code)
                             self._assert_sse_chunk_success(chunk, response.status_code)
                             yield chunk
+                        logger.debug("Taiji stream aiter_lines ended, total_lines=%s", lines_received)
                         return
                 except httpx.RequestError as exc:
+                    logger.error(
+                        "Taiji stream RequestError: type=%s message=%s",
+                        type(exc).__name__,
+                        str(exc),
+                    )
                     raise TaijiAPIError(f"Taiji stream request failed: {exc!s}") from exc
 
     def _default_headers(self) -> dict[str, str]:
@@ -437,7 +473,7 @@ class TaijiClient:
         if code == 0:
             return
 
-        message = str(chunk.get("msg") or chunk.get("data") or "Taiji SSE stream returned an error.")
+        message = str(chunk.get("err") or chunk.get("msg") or chunk.get("data") or "Taiji SSE stream returned an error.")
         raise TaijiAPIError(
             message,
             code=code,

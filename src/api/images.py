@@ -72,9 +72,12 @@ async def _generate_images(
 
         images = []
         async with get_semaphore():
-            async for chunk in taiji_client.send_message(session_id, text, files=[]):
-                extracted = extract_fn(chunk)
-                images.extend(extracted)
+            async for chunk in taiji_client.send_message(session_id, text, files=[], stream=True):
+                if isinstance(chunk, dict) and chunk.get("type") == "string":
+                    chunk_data = chunk.get("data")
+                    if isinstance(chunk_data, str):
+                        extracted = extract_fn(chunk_data)
+                        images.extend(extracted)
 
         if not images:
             raise HTTPException(status_code=500, detail="No images generated")
