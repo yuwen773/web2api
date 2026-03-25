@@ -98,6 +98,21 @@ class MetricsCollector:
             registry=registry
         )
 
+        # 业务指标 - 重新认证
+        self._taiji_reauth_total = Counter(
+            'taiji_reauth_total',
+            'Total Taiji AI re-authentication events',
+            registry=registry
+        )
+
+        # 业务指标 - 图片生成
+        self._taiji_images_generated_total = Counter(
+            'taiji_images_generated_total',
+            'Total Taiji AI images generated',
+            ['model'],
+            registry=registry
+        )
+
     def record_http_request(
         self,
         method: str,
@@ -161,6 +176,20 @@ class MetricsCollector:
         """减少活跃会话计数"""
         self._taiji_session_active.dec()
 
+    def record_reauth(self):
+        """记录重新认证事件"""
+        self._taiji_reauth_total.inc()
+
+    def record_image_generated(self, model: str, count: int):
+        """
+        记录图片生成事件
+
+        Args:
+            model: 模型名称
+            count: 生成的图片数量
+        """
+        self._taiji_images_generated_total.labels(model=model).inc(count)
+
     def record_error(self, error_type: str, error_message: str):
         """
         记录错误
@@ -185,6 +214,8 @@ class MetricsCollector:
                 "http_errors_total": self._get_metric_value(self._http_errors_total),
                 "taiji_tokens_total": self._get_metric_value(self._taiji_tokens_total),
                 "taiji_session_active": self._get_metric_value(self._taiji_session_active),
+                "taiji_reauth_total": self._get_metric_value(self._taiji_reauth_total),
+                "taiji_images_generated_total": self._get_metric_value(self._taiji_images_generated_total),
             }
 
     def _get_metric_value(self, metric) -> Any:

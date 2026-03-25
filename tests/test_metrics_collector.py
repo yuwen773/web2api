@@ -107,3 +107,39 @@ def test_export_metrics():
     assert isinstance(metrics, bytes)
     assert b"http_requests_total" in metrics
     assert b"http_request_duration_seconds" in metrics
+
+
+def test_record_reauth():
+    """测试记录重新认证事件"""
+    collector = MetricsCollector()
+    collector.record_reauth()
+
+    metrics = collector.get_metrics()
+    assert metrics["taiji_reauth_total"] == 1
+
+    # 记录多次
+    collector.record_reauth()
+    collector.record_reauth()
+    metrics = collector.get_metrics()  # 重新获取
+    assert metrics["taiji_reauth_total"] == 3
+
+
+def test_record_image_generated():
+    """测试记录图片生成事件"""
+    collector = MetricsCollector()
+
+    # 记录单张图片
+    collector.record_image_generated("gemini-2.5-flash-image", 1)
+    metrics = collector.get_metrics()
+    assert metrics["taiji_images_generated_total"] == 1
+
+    # 记录多张图片
+    collector.record_image_generated("gemini-2.5-flash-image", 4)
+    metrics = collector.get_metrics()  # 重新获取
+    assert metrics["taiji_images_generated_total"] == 5
+
+    # 记录不同模型的图片
+    collector.record_image_generated("gpt-4o-image-vip", 2)
+    metrics = collector.get_metrics()  # 重新获取
+    assert metrics["taiji_images_generated_total"] == 7  # 总数
+

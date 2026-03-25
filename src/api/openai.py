@@ -255,7 +255,7 @@ def _build_chat_completion_response(model: str, taiji_response: dict[str, Any]) 
     content = str(taiji_response.get("text") or "")
 
     # 记录 token 使用情况
-    get_metrics_collector().record_tokens(
+    get_metrics_collector().record_token_usage(
         model=model,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
