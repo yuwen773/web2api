@@ -114,27 +114,24 @@ class MetricsCollector:
             status_code: HTTP 状态码
             duration_ms: 请求耗时（毫秒）
         """
-        with self._lock:
-            self._http_requests_total.labels(
-                method=method,
-                endpoint=endpoint,
-                status=str(status_code)
-            ).inc()
+        self._http_requests_total.labels(
+            method=method,
+            endpoint=endpoint,
+            status=str(status_code)
+        ).inc()
 
-            self._http_request_duration_seconds.labels(
-                method=method,
-                endpoint=endpoint
-            ).observe(duration_ms / 1000.0)
+        self._http_request_duration_seconds.labels(
+            method=method,
+            endpoint=endpoint
+        ).observe(duration_ms / 1000.0)
 
     def increment_in_flight(self):
         """增加并发请求计数"""
-        with self._lock:
-            self._http_requests_in_flight.inc()
+        self._http_requests_in_flight.inc()
 
     def decrement_in_flight(self):
         """减少并发请求计数"""
-        with self._lock:
-            self._http_requests_in_flight.dec()
+        self._http_requests_in_flight.dec()
 
     def record_token_usage(
         self,
@@ -150,22 +147,19 @@ class MetricsCollector:
             prompt_tokens: 提示词 token 数
             completion_tokens: 完成 token 数
         """
-        with self._lock:
-            total_tokens = prompt_tokens + completion_tokens
-            self._taiji_tokens_total.labels(model=model).inc(total_tokens)
-            self._taiji_prompt_tokens.labels(model=model).inc(prompt_tokens)
-            self._taiji_completion_tokens.labels(model=model).inc(completion_tokens)
+        total_tokens = prompt_tokens + completion_tokens
+        self._taiji_tokens_total.labels(model=model).inc(total_tokens)
+        self._taiji_prompt_tokens.labels(model=model).inc(prompt_tokens)
+        self._taiji_completion_tokens.labels(model=model).inc(completion_tokens)
 
     def increment_session(self):
         """增加活跃会话计数"""
-        with self._lock:
-            self._taiji_session_active.inc()
-            self._taiji_session_total.inc()
+        self._taiji_session_active.inc()
+        self._taiji_session_total.inc()
 
     def decrement_session(self):
         """减少活跃会话计数"""
-        with self._lock:
-            self._taiji_session_active.dec()
+        self._taiji_session_active.dec()
 
     def record_error(self, error_type: str, error_message: str):
         """
@@ -175,8 +169,7 @@ class MetricsCollector:
             error_type: 错误类型
             error_message: 错误消息
         """
-        with self._lock:
-            self._http_errors_total.labels(error_type=error_type).inc()
+        self._http_errors_total.labels(error_type=error_type).inc()
 
     def get_metrics(self) -> Dict[str, Any]:
         """
