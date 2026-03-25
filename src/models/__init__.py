@@ -17,6 +17,7 @@ from .responses_response import (
     ResponseOutputItem,
     ResponseUsage,
 )
+from .images_request import ImageGenerationsRequest, ImageCreateRequest
 
 
 __all__ = [
@@ -28,6 +29,8 @@ __all__ = [
     "ChatCompletionResponse",
     "ChatMessage",
     "Choice",
+    "ImageCreateRequest",
+    "ImageGenerationsRequest",
     "LoginRequest",
     "LoginResponse",
     "TokenData",
