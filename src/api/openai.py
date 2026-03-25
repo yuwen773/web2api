@@ -15,6 +15,7 @@ from src.client.taiji_client import TaijiAPIError
 from src.models.openai_request import ChatCompletionRequest
 from src.models.responses_request import ResponseRequest
 from src.utils.message_converter import convert_openai_messages
+from src.utils.metrics_collector import get_metrics_collector
 from src.utils.responses_converter import (
     response_request_to_chat_request,
     chat_response_to_response_object,
@@ -252,6 +253,13 @@ def _build_chat_completion_response(model: str, taiji_response: dict[str, Any]) 
     completion_tokens = _to_int(taiji_response.get("completionTokens")) or 0
     total_tokens = _to_int(taiji_response.get("useTokens")) or 0
     content = str(taiji_response.get("text") or "")
+
+    # 记录 token 使用情况
+    get_metrics_collector().record_tokens(
+        model=model,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+    )
 
     return {
         "id": f"chatcmpl-{uuid4().hex}",

@@ -10,6 +10,7 @@ import httpx
 
 from src.models.auth import LoginRequest, LoginResponse
 from src.utils.concurrency import get_semaphore
+from src.utils.metrics_collector import get_metrics_collector
 
 
 DEFAULT_ACCEPT_LANGUAGE = "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6"
@@ -163,8 +164,10 @@ class TaijiClient:
 
         session_id = data.get("id")
         if isinstance(session_id, int):
+            get_metrics_collector().increment_session()
             return session_id
         if isinstance(session_id, str) and session_id.isdigit():
+            get_metrics_collector().increment_session()
             return int(session_id)
         raise TaijiAPIError(
             "Taiji create_session response does not contain a valid session id.",
@@ -184,6 +187,8 @@ class TaijiClient:
         )
         body = self._extract_body(response)
         self._assert_success(body, response.status_code)
+        if response.status_code == 204:
+            get_metrics_collector().decrement_session()
         return body
 
     @overload
@@ -414,6 +419,7 @@ class TaijiClient:
                 status_code=401,
             )
         logger.info("Taiji token expired (HTTP 401), re-authenticating and retrying once.")
+        get_metrics_collector().record_reauth()
         await self.login(self._account, self._password)
 
     def _parse_sse_payload(self, payload: str, status_code: int) -> dict[str, Any]:
