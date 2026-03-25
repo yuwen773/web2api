@@ -9,6 +9,7 @@ import structlog
 from structlog.types import EventDict, Processor
 
 from src.utils.request_context import get_request_id
+from src.utils.sensitive_filter import make_sensitive_filter
 from src.utils.settings import Settings, get_settings
 
 
@@ -80,6 +81,9 @@ def _setup_structlog(settings: Settings) -> None:
         event_dict["request_id"] = request_id if request_id else "-"
         return event_dict
 
+    # 创建敏感信息过滤器
+    sensitive_filter = make_sensitive_filter(settings)
+
     # 共享的处理器列表
     shared_processors: list[Processor] = [
         structlog.contextvars.merge_contextvars,
@@ -89,6 +93,7 @@ def _setup_structlog(settings: Settings) -> None:
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         add_request_id,
+        sensitive_filter,  # 添加敏感信息过滤器
         structlog.processors.format_exc_info,
     ]
 
