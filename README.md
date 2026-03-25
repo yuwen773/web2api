@@ -12,6 +12,9 @@
   - 兼容 OpenAI Codex CLI
 - Anthropic 兼容接口
   - `POST /v1/messages`（支持流式和非流式）
+- 图片生成接口
+  - `POST /v1/images/generations`（Nano-banana 绘图）
+  - `POST /v1/images/create`（GT-4o-image-vip 绘图）
 - 每次请求创建独立会话，完成后自动删除，避免上下文串线
 - 自动重登录（401 时重试一次）
 - 全局并发限制（`MAX_CONCURRENT`）
@@ -119,6 +122,24 @@ curl http://localhost:8000/v1/responses \
   -H "Content-Type: application/json" \
   -d "{\"model\":\"gpt-4.1-mini\",\"input\":\"hello\",\"instructions\":\"You are a helpful assistant.\"}"
 ```
+
+### Nano-banana 图片生成
+
+```bash
+curl http://localhost:8000/v1/images/generations \
+  -H "Content-Type: application/json" \
+  -d "{\"model\":\"Nano-banana 2 绘图\",\"prompt\":\"科技感封面图\",\"n\":2,\"ratio\":\"16:9\"}"
+```
+
+### GT-4o-image-vip 图片生成
+
+```bash
+curl http://localhost:8000/v1/images/create \
+  -H "Content-Type: application/json" \
+  -d "{\"model\":\"GT-4o-image-vip（绘图模型）\",\"prompt\":\"科技感封面图\",\"n\":2,\"ratio\":\"16:9\"}"
+```
+
+详细接口文档请查看 [docs/api/images.md](docs/api/images.md)
 
 ## 配置说明
 
