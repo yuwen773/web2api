@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import time
 from typing import Any
 
@@ -11,9 +10,10 @@ from src.models.images_request import ImageGenerationsRequest, ImageCreateReques
 from src.utils.image_converter import extract_nano_banana_images, extract_gt4o_images
 from src.utils.concurrency import get_semaphore
 from src.utils.metrics_collector import get_metrics_collector
+from src.utils.logging_config import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/v1/images", tags=["images"])
 
@@ -54,7 +54,7 @@ async def _safe_delete_session(taiji_client: Any, session_id: int) -> None:
     try:
         await taiji_client.delete_session(session_id)
     except TaijiAPIError as exc:
-        logger.warning("Failed to delete Taiji session %s: %s", session_id, exc)
+        logger.warning("session_delete_failed", session_id=session_id, error=str(exc))
 
 
 async def _generate_images(
