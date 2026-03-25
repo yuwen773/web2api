@@ -10,3 +10,26 @@ server:
 
 limits:
   max_concurrent: 5
+
+# 日志配置
+logging:
+  level: INFO
+  format: both  # text/json/both
+  directory: ./logs
+  rotation:
+    max_size_mb: 100
+    backup_count: 30
+    compress_days: 7
+  sensitive_fields:
+    - authorization
+    - password
+    - token
+    - session_id
+    - account
+
+# 监控配置
+monitoring:
+  enabled: true
+  metrics_endpoint: /metrics
+  stats_endpoint: /stats
+  stats_refresh_sec: 5
