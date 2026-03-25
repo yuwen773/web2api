@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,12 +50,15 @@ class Settings(BaseSettings):
     # 日志轮转配置
     log_max_size_mb: int = Field(default=100, description="单个日志文件最大大小(MB)")
     log_backup_count: int = Field(default=30, description="保留的日志文件数量")
-    log_compress_days: int = Field(default=7, description="压缩天数")
+    # 注意：RotatingFileHandler 不支持自动压缩，此配置保留供未来实现
+    # 后续任务将实现基于时间的日志轮转和压缩功能
+    log_compress_days: int = Field(default=7, description="压缩天数（注意：RotatingFileHandler 不支持自动压缩，此配置保留供未来实现）")
 
-    # 敏感字段脱敏配置
+    # 敏感字段脱敏配置（在后续任务中实现）
+    # 实际脱敏功能将在 Task 2-3 中实现，包括日志中间件和敏感数据过滤
     sensitive_fields: list[str] = Field(
         default=["authorization", "password", "token", "session_id", "account"],
-        description="需要脱敏的字段"
+        description="需要脱敏的字段（注：实际脱敏功能在后续任务中实现）"
     )
 
     # 监控配置
@@ -63,6 +66,37 @@ class Settings(BaseSettings):
     metrics_endpoint: str = Field(default="/metrics", description="metrics 端点路径")
     stats_endpoint: str = Field(default="/stats", description="stats 端点路径")
     stats_refresh_sec: int = Field(default=5, description="stats 页面刷新间隔(秒)")
+
+    @field_validator('log_directory')
+    @classmethod
+    def validate_log_directory(cls, v: str) -> str:
+        """验证日志目录路径安全性
+
+        确保日志目录路径是相对路径或在项目目录内，
+        防止路径遍历安全风险。
+        """
+        # 不允许包含路径遍历序列的相对路径
+        if '..' in v.replace('\\', '/').split('/'):
+            raise ValueError(
+                f"log_directory cannot contain '..' for security reasons. "
+                f"Use a simple relative path like 'logs' or an absolute path within the project directory."
+            )
+
+        path = Path(v).resolve()
+        # 获取项目根目录
+        project_root = Path(__file__).resolve().parents[2]
+
+        # 如果是绝对路径，必须确保在项目目录内
+        if path.is_absolute():
+            try:
+                # 检查路径是否在项目目录内
+                path.relative_to(project_root)
+            except ValueError:
+                raise ValueError(
+                    f"log_directory must be a relative path or within project directory. "
+                    f"Got: {v} (resolved to: {path})"
+                )
+        return v
 
 
 def _normalize_text(value: Any) -> str | None:

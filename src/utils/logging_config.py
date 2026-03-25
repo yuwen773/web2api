@@ -9,7 +9,7 @@ import structlog
 from structlog.types import EventDict, Processor
 
 from src.utils.request_context import get_request_id
-from src.utils.settings import get_settings
+from src.utils.settings import Settings, get_settings
 
 
 class RequestIdFilter(logging.Filter):
@@ -27,7 +27,14 @@ def setup_logging() -> None:
 
     # 确保日志目录存在
     log_dir = Path(settings.log_directory)
-    log_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        # 提供清晰的错误信息，帮助用户诊断问题
+        raise RuntimeError(
+            f"Failed to create log directory {log_dir}: {e}. "
+            f"Please check permissions and disk space."
+        ) from e
 
     # 配置标准 logging（用于文件和控制台）
     _setup_standard_logging(log_dir, settings)
@@ -36,7 +43,7 @@ def setup_logging() -> None:
     _setup_structlog(settings)
 
 
-def _setup_standard_logging(log_dir: Path, settings: Any) -> None:
+def _setup_standard_logging(log_dir: Path, settings: Settings) -> None:
     """配置标准 logging 模块"""
     root_logger = logging.getLogger()
 
@@ -64,7 +71,7 @@ def _setup_standard_logging(log_dir: Path, settings: Any) -> None:
     setattr(root_logger, "_web2api_structlog_configured", True)
 
 
-def _setup_structlog(settings: Any) -> None:
+def _setup_structlog(settings: Settings) -> None:
     """配置 structlog"""
 
     def add_request_id(logger: Any, method_name: str, event_dict: EventDict) -> EventDict:
