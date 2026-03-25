@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.anthropic import router as anthropic_router
+from src.api.images import router as images_router
 from src.api.openai import router as openai_router
 from src.client.taiji_client import TaijiClient
 from src.middleware import RequestContextAndErrorMiddleware
@@ -67,6 +68,7 @@ app.add_middleware(
 
 app.include_router(openai_router)
 app.include_router(anthropic_router)
+app.include_router(images_router)
 
 
 @app.get("/")
