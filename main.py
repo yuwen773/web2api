@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.anthropic import router as anthropic_router
 from src.api.images import router as images_router
+from src.api.monitoring import metrics, stats, stats_json
 from src.api.openai import router as openai_router
 from src.client.taiji_client import TaijiClient
 from src.middleware import RequestContextAndErrorMiddleware
@@ -72,6 +73,12 @@ app.add_middleware(
 app.include_router(openai_router)
 app.include_router(anthropic_router)
 app.include_router(images_router)
+
+# 监控端点
+settings = load_settings()
+app.add_route(settings.metrics_endpoint, metrics, methods=["GET"])
+app.add_route(settings.stats_endpoint + "/json", stats_json, methods=["GET"])
+app.add_route(settings.stats_endpoint, stats, methods=["GET"])
 
 
 @app.get("/")
