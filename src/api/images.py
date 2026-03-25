@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from src.client.taiji_client import TaijiAPIError
 from src.models.images_request import ImageGenerationsRequest, ImageCreateRequest
 from src.utils.image_converter import extract_nano_banana_images, extract_gt4o_images
+from src.utils.concurrency import get_semaphore
 
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,7 @@ async def _generate_images(
         text = f"帮我生成标题为\"{prompt}\"的 {n} 张 封面图，比例为 '{ratio}'"
 
         images = []
-        async with taiji_client._semaphore:
+        async with get_semaphore():
             async for chunk in taiji_client.send_message(session_id, text, files=[]):
                 extracted = extract_fn(chunk)
                 images.extend(extracted)
