@@ -14,8 +14,10 @@ from src.api.monitoring import metrics, stats, stats_json
 from src.api.openai import router as openai_router
 from src.client.taiji_client import TaijiClient
 from src.middleware import RequestContextAndErrorMiddleware
+from src.middleware.metrics_middleware import MetricsMiddleware
 from src.utils.concurrency import configure_semaphore
 from src.utils.logging_config import get_logger, setup_logging
+from src.utils.metrics_collector import get_metrics_collector
 from src.utils.settings import load_settings
 
 
@@ -69,6 +71,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(MetricsMiddleware, collector=get_metrics_collector())
 
 app.include_router(openai_router)
 app.include_router(anthropic_router)
