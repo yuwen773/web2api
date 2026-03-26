@@ -68,6 +68,9 @@ config/config.yaml
 # Claude Code
 .claude/worktrees/
 
+# Skills sensitive files
+skills/*/assets/credentials.json
+
 # Project research/crawler
 crawler/
 
