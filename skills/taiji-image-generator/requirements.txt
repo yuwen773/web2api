@@ -1,0 +1,2 @@
+# Taiji Image Generator Dependencies
+httpx>=0.25.0
