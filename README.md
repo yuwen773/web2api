@@ -241,6 +241,47 @@ curl http://localhost:8000/v1/chat/completions \
 - `/openapi.json` - OpenAPI 规范
 - `/redoc` - ReDoc 文档
 
+## Claude Code Skills
+
+### taiji-image-generator
+
+独立的图片生成工具，不依赖 web2api 服务，支持 Windows/Linux/macOS。
+
+**功能：**
+- 通过 Taiji AI API 直接生成图片
+- 支持 Nano-banana 和 GT-4o-image-vip 模型
+- 兼容 Claude Code、Codex、OpenClaw 等 CLI 工具
+
+**安装：**
+
+```bash
+cd skills/taiji-image-generator
+pip install -r requirements.txt
+```
+
+**配置：** 创建 `assets/credentials.json`：
+
+```json
+{
+  "base_url": "https://ai.aurod.cn",
+  "account": "your@email.com",
+  "password": "your_password",
+  "app_version": "2.14.0"
+}
+```
+
+**使用：**
+
+```bash
+python scripts/taiji_image.py generate \
+  --model "Nano-banana 2 绘图" \
+  --prompt "科技感封面图" \
+  --n 2 \
+  --ratio "16:9"
+```
+
+详细文档请查看 [skills/taiji-image-generator/SKILL.md](skills/taiji-image-generator/SKILL.md)
+
 ## Codex 集成
 
 本项目支持 OpenAI Codex CLI，可以通过配置本地 API 端点使用。
