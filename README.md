@@ -241,3 +241,37 @@ codex "帮我写一个排序函数"
 - `response.created` - 响应创建事件
 - `response.output_item.done` - 输出项完成（包含完整消息）
 - `response.completed` - 响应完成（包含 usage 信息）
+
+## 日志和监控
+
+### 日志
+
+服务使用 structlog 记录结构化日志，支持 JSON 和文本双格式输出。
+
+日志文件位于 `logs/` 目录：
+- `app.log` - 主日志（JSON 格式）
+- `app-error.log` - 错误日志（ERROR 及以上）
+
+### 监控端点
+
+| 端点 | 说明 |
+|------|------|
+| `GET /metrics` | Prometheus 格式的指标 |
+| `GET /stats` | 可视化监控仪表盘 |
+| `GET /stats/json` | JSON 格式的统计数据 |
+
+### 配置
+
+日志和监控配置在 `config/config.yaml` 中：
+
+```yaml
+logging:
+  level: INFO
+  format: both
+  directory: ./logs
+
+monitoring:
+  enabled: true
+  metrics_endpoint: /metrics
+  stats_endpoint: /stats
+```

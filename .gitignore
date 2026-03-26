@@ -39,9 +39,10 @@ ENV/
 .env.local
 .env.*.local
 
-# Logs
-*.log
-logs/
+# 日志文件
+logs/*.log
+logs/*.log.*
+logs/*.gz
 
 # OS
 .DS_Store

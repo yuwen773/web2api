@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from collections.abc import AsyncIterator, Awaitable
 from typing import Any, Literal, overload
 
@@ -10,6 +9,8 @@ import httpx
 
 from src.models.auth import LoginRequest, LoginResponse
 from src.utils.concurrency import get_semaphore
+from src.utils.metrics_collector import get_metrics_collector
+from src.utils.logging_config import get_logger
 
 
 DEFAULT_ACCEPT_LANGUAGE = "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6"
@@ -24,7 +25,7 @@ DEFAULT_SEC_CH_UA_PLATFORM = '"Windows"'
 CHAT_REFERER_PATH = "/chat?_userMenuKey=chat"
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TaijiAPIError(RuntimeError):
@@ -81,7 +82,7 @@ class TaijiClient:
 
     async def login(self, account: str, password: str) -> str:
         account_hint = self._mask_account(account)
-        logger.info("Taiji login started for account=%s", account_hint)
+        logger.info("taiji_login_started", account=account_hint)
 
         try:
             payload = LoginRequest(account=account, password=password).model_dump()
@@ -117,10 +118,10 @@ class TaijiClient:
                 or response.cookies.get("server_name_session")
             )
         except TaijiAPIError as exc:
-            logger.error("Taiji login failed for account=%s: %s", account_hint, exc)
+            logger.error("taiji_login_failed", account=account_hint, error=str(exc))
             raise
 
-        logger.info("Taiji login succeeded for account=%s", account_hint)
+        logger.info("taiji_login_succeeded", account=account_hint)
         if self.token is None:
             raise TaijiAPIError("Taiji login failed to produce a token.")
         return self.token
@@ -164,8 +165,10 @@ class TaijiClient:
 
         session_id = data.get("id")
         if isinstance(session_id, int):
+            get_metrics_collector().increment_session()
             return session_id
         if isinstance(session_id, str) and session_id.isdigit():
+            get_metrics_collector().increment_session()
             return int(session_id)
         raise TaijiAPIError(
             "Taiji create_session response does not contain a valid session id.",
@@ -185,6 +188,8 @@ class TaijiClient:
         )
         body = self._extract_body(response)
         self._assert_success(body, response.status_code)
+        if response.status_code == 204:
+            get_metrics_collector().decrement_session()
         return body
 
     @overload
@@ -269,7 +274,7 @@ class TaijiClient:
             ):
                 yield chunk
         except asyncio.CancelledError:
-            logger.info("Client disconnected during Taiji streaming response.")
+            logger.info("client_disconnected", event="Client disconnected during Taiji streaming response.")
             raise
 
     async def _iter_chat_chunks(
@@ -449,7 +454,8 @@ class TaijiClient:
                 "Token expired but no stored credentials are available for automatic re-login.",
                 status_code=401,
             )
-        logger.info("Taiji token expired (HTTP 401), re-authenticating and retrying once.")
+        logger.info("taiji_token_expired", event="Token expired, re-authenticating")
+        get_metrics_collector().record_reauth()
         await self.login(self._account, self._password)
 
     def _parse_sse_payload(self, payload: str, status_code: int) -> dict[str, Any]:

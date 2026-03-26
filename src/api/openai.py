@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -15,13 +14,15 @@ from src.client.taiji_client import TaijiAPIError
 from src.models.openai_request import ChatCompletionRequest
 from src.models.responses_request import ResponseRequest
 from src.utils.message_converter import convert_openai_messages
+from src.utils.metrics_collector import get_metrics_collector
 from src.utils.responses_converter import (
     response_request_to_chat_request,
     chat_response_to_response_object,
 )
+from src.utils.logging_config import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["openai"])
 
@@ -178,7 +179,7 @@ async def _chat_completions_stream(
             )
             yield "data: [DONE]\n\n"
         except asyncio.CancelledError:
-            logger.info("Client disconnected during OpenAI streaming response.")
+            logger.info("client_disconnected", event="Client disconnected during OpenAI streaming response.")
             raise
         finally:
             await _safe_delete_session(taiji_client, session_id)
@@ -252,6 +253,13 @@ def _build_chat_completion_response(model: str, taiji_response: dict[str, Any]) 
     completion_tokens = _to_int(taiji_response.get("completionTokens")) or 0
     total_tokens = _to_int(taiji_response.get("useTokens")) or 0
     content = str(taiji_response.get("text") or "")
+
+    # 记录 token 使用情况
+    get_metrics_collector().record_token_usage(
+        model=model,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+    )
 
     return {
         "id": f"chatcmpl-{uuid4().hex}",
@@ -354,7 +362,7 @@ async def _safe_delete_session(taiji_client: Any, session_id: int) -> None:
     try:
         await taiji_client.delete_session(session_id)
     except TaijiAPIError as exc:
-        logger.warning("Failed to delete Taiji session %s: %s", session_id, exc)
+        logger.warning("session_delete_failed", session_id=session_id, error=str(exc))
 
 
 @router.post("/v1/responses", response_model=None)
@@ -370,11 +378,7 @@ async def responses_create(
     # 调试日志：打印原始请求体
     import json
     body = await request.body()
-    logger.info("=== /v1/responses DEBUG ===")
-    logger.info("Raw body: %s", body.decode("utf-8"))
-    logger.info("Parsed input type: %s", type(request_body.input))
-    logger.info("Parsed input value: %s", request_body.input)
-    logger.info("==========================")
+    logger.info("responses_api_request", raw_body=body.decode("utf-8"), input_type=str(type(request_body.input)), input_value=str(request_body.input))
 
     taiji_client = _get_taiji_client(request)
 
@@ -518,7 +522,7 @@ async def _responses_stream(
                 }
             })
         except asyncio.CancelledError:
-            logger.info("Client disconnected during Responses streaming.")
+            logger.info("client_disconnected", event="Client disconnected during Responses streaming.")
             raise
         finally:
             await _safe_delete_session(taiji_client, session_id)
