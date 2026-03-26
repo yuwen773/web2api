@@ -14,6 +14,7 @@ from src.api.monitoring import metrics, stats, stats_json
 from src.api.openai import router as openai_router
 from src.client.taiji_client import TaijiClient
 from src.middleware import RequestContextAndErrorMiddleware
+from src.middleware.api_key import ApiKeyAuthMiddleware
 from src.middleware.metrics_middleware import MetricsMiddleware
 from src.utils.concurrency import configure_semaphore
 from src.utils.logging_config import get_logger, setup_logging
@@ -63,6 +64,7 @@ app = FastAPI(
 )
 
 app.add_middleware(RequestContextAndErrorMiddleware)
+app.add_middleware(ApiKeyAuthMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     stats_endpoint: str = Field(default="/stats", description="stats 端点路径")
     stats_refresh_sec: int = Field(default=5, description="stats 页面刷新间隔(秒)")
 
+    # API 鉴权配置
+    api_keys: list[str] = Field(default=[], description="API Key 白名单，空列表表示不启用鉴权")
+
     @field_validator('log_directory')
     @classmethod
     def validate_log_directory(cls, v: str) -> str:
@@ -180,6 +183,7 @@ def load_settings(
     limits = _get_section(config, "limits")
     logging_config = _get_section(config, "logging")
     monitoring_config = _get_section(config, "monitoring")
+    api_config = _get_section(config, "api")
 
     # 构建配置字典
     settings_dict = {}
@@ -259,6 +263,19 @@ def load_settings(
             settings_dict["stats_endpoint"] = stats_endpoint
         if refresh_sec := monitoring_config.get("stats_refresh_sec"):
             settings_dict["stats_refresh_sec"] = int(refresh_sec)
+
+    # API 鉴权配置
+    if api_keys_raw := api_config.get("api_keys"):
+        if isinstance(api_keys_raw, list):
+            settings_dict["api_keys"] = [k for k in api_keys_raw if k]
+        elif (api_keys_str := _normalize_text(api_keys_raw)):
+            # 支持逗号分隔的字符串
+            settings_dict["api_keys"] = [k.strip() for k in api_keys_str.split(",") if k.strip()]
+
+    # API 鉴权配置（从环境变量，覆盖配置文件）
+    api_keys_env = _normalize_text(os.getenv("WEB2API_API_KEYS"))
+    if api_keys_env:
+        settings_dict["api_keys"] = [k.strip() for k in api_keys_env.split(",") if k.strip()]
 
     _settings = Settings(**settings_dict)
     return _settings
