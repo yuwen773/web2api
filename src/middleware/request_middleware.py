@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import time
 from typing import Any
 from uuid import uuid4
@@ -14,10 +13,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from src.client.taiji_client import TaijiAPIError
+from src.utils.logging_config import get_logger
 from src.utils.request_context import reset_request_id, set_request_id
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 ERROR_CODE_MAP: dict[int, str] = {
     400: "bad_request",
@@ -36,7 +36,7 @@ class RequestContextAndErrorMiddleware(BaseHTTPMiddleware):
         response: Response | None = None
         status_code = 500
 
-        logger.info("API request started: %s %s", request.method, request.url.path)
+        logger.info("API request started", method=request.method, path=request.url.path)
 
         try:
             response = await call_next(request)
@@ -47,10 +47,10 @@ class RequestContextAndErrorMiddleware(BaseHTTPMiddleware):
                     fallback=_default_message(status_code),
                 )
                 logger.error(
-                    "HTTP error response: status=%s mapped_status=%s message=%s",
-                    response.status_code,
-                    status_code,
-                    message,
+                    "HTTP error response",
+                    status_code=response.status_code,
+                    mapped_status=status_code,
+                    message=message,
                 )
                 response = _build_error_response(
                     status_code=status_code,
@@ -60,26 +60,26 @@ class RequestContextAndErrorMiddleware(BaseHTTPMiddleware):
             else:
                 status_code = response.status_code
         except asyncio.CancelledError:
-            logger.info("Client disconnected before response completed.")
+            logger.info("Client disconnected before response completed")
             raise
         except RequestValidationError as exc:
             status_code = 400
             message = _build_validation_error_message(exc)
-            logger.error("Request validation failed: %s", message)
+            logger.error("Request validation failed", message=message)
             response = _build_error_response(status_code=status_code, message=message, request_id=request_id)
         except TaijiAPIError as exc:
             status_code = _map_status_code(exc.status_code)
             message = str(exc) or _default_message(status_code)
-            logger.error("Taiji upstream error: status=%s message=%s", status_code, message)
+            logger.error("Taiji upstream error", status_code=status_code, message=message)
             response = _build_error_response(status_code=status_code, message=message, request_id=request_id)
         except HTTPException as exc:
             status_code = _map_status_code(exc.status_code)
             message = _extract_message(exc.detail, fallback=_default_message(status_code))
-            logger.error("HTTP exception: status=%s message=%s", status_code, message)
+            logger.error("HTTP exception", status_code=status_code, message=message)
             response = _build_error_response(status_code=status_code, message=message, request_id=request_id)
         except Exception:
             status_code = 500
-            logger.exception("Unhandled server exception.")
+            logger.exception("Unhandled server exception")
             response = _build_error_response(
                 status_code=status_code,
                 message=_default_message(status_code),
@@ -88,11 +88,11 @@ class RequestContextAndErrorMiddleware(BaseHTTPMiddleware):
         finally:
             duration_ms = (time.perf_counter() - started_at) * 1000
             logger.info(
-                "API request finished: %s %s -> %s (%.2f ms)",
-                request.method,
-                request.url.path,
-                status_code,
-                duration_ms,
+                "API request finished",
+                method=request.method,
+                path=request.url.path,
+                status_code=status_code,
+                duration_ms=duration_ms,
             )
             reset_request_id(token)
 

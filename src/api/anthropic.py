@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from collections.abc import AsyncIterator
 from typing import Any
 from uuid import uuid4
@@ -13,9 +12,10 @@ from fastapi.responses import StreamingResponse
 from src.client.taiji_client import TaijiAPIError
 from src.models.anthropic_request import AnthropicContentBlock, AnthropicRequest
 from src.utils.message_converter import convert_openai_messages
+from src.utils.logging_config import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["anthropic"])
 
@@ -171,7 +171,7 @@ async def _messages_stream(
 
             yield _format_sse_event("message_stop", {"type": "message_stop"})
         except asyncio.CancelledError:
-            logger.info("Client disconnected during Anthropic streaming response.")
+            logger.info("client_disconnected", event="Client disconnected during Anthropic streaming response.")
             raise
         finally:
             await _safe_delete_session(taiji_client, session_id)
@@ -400,4 +400,4 @@ async def _safe_delete_session(taiji_client: Any, session_id: int) -> None:
     try:
         await taiji_client.delete_session(session_id)
     except TaijiAPIError as exc:
-        logger.warning("Failed to delete Taiji session %s: %s", session_id, exc)
+        logger.warning("session_delete_failed", session_id=session_id, error=str(exc))
