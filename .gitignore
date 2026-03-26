@@ -65,4 +65,13 @@ htmlcov/
 # Config files (may contain sensitive data)
 config/config.yaml
 
+# Claude Code
+.claude/worktrees/
+
+# Project research/crawler
+crawler/
+
+# Project memory bank
+memory-bank/
+
 reference/
