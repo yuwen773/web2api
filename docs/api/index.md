@@ -87,12 +87,49 @@ GET /v1/models
 }
 ```
 
+常见错误码：
+
+| code | HTTP 状态 | 说明 |
+|------|-----------|------|
+| `auth_failed` | 401 | API Key 缺失或无效 |
+| `bad_request` | 400 | 请求参数错误 |
+| `rate_limit_exceeded` | 429 | 请求过于频繁 |
+| `internal_server_error` | 500 | 服务器内部错误 |
+
 ---
 
-## 通用请求头
+## 认证
+
+服务支持可选的 API Key 鉴权（配置 `WEB2API_API_KEYS` 启用）。
+
+### 请求头
 
 | 头部 | 值 | 说明 |
 |------|-----|------|
 | `Content-Type` | `application/json` | 所有 API 均需要 |
-| `x-api-key` | 任意值 | 仅 Anthropic API 需要 |
+| `X-API-Key` | 配置的 API Key | 鉴权启用时需要 |
 | `x-request-id` | 任意值 | 可选，用于追踪请求 |
+
+### 鉴权失败响应
+
+```json
+{
+  "error": {
+    "code": "auth_failed",
+    "message": "Missing API key.",
+    "status": 401,
+    "request_id": "请求ID"
+  },
+  "detail": "Missing API key."
+}
+```
+
+### 豁免路径
+
+以下端点无需 API Key：
+
+- `/metrics` - Prometheus 指标
+- `/stats` - 监控仪表盘
+- `/docs` - API 文档
+- `/openapi.json` - OpenAPI 规范
+- `/redoc` - ReDoc 文档

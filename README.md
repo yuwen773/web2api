@@ -19,6 +19,7 @@
 - 自动重登录（401 时重试一次）
 - 全局并发限制（`MAX_CONCURRENT`）
 - 统一错误格式与请求级日志（含 `request_id`）
+- API Key 鉴权（可选，配置 `WEB2API_API_KEYS` 启用）
 
 ## 快速开始
 
@@ -50,6 +51,7 @@ copy .env.example .env
 - `MAX_CONCURRENT`（默认 `5`）
 - `WEB2API_HOST`（默认 `0.0.0.0`）
 - `WEB2API_PORT`（默认 `8000`）
+- `WEB2API_API_KEYS`（默认空，不启用鉴权，支持逗号分隔多个 key）
 
 ### 3. 运行
 
@@ -70,6 +72,7 @@ curl http://localhost:8000/
 ```bash
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
   -d "{\"model\":\"gpt-4.1-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}"
 ```
 
@@ -78,6 +81,7 @@ curl http://localhost:8000/v1/chat/completions \
 ```bash
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
   -d "{\"model\":\"gpt-4.1-mini\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}"
 ```
 
@@ -86,7 +90,7 @@ curl http://localhost:8000/v1/chat/completions \
 ```bash
 curl http://localhost:8000/v1/messages \
   -H "Content-Type: application/json" \
-  -H "x-api-key: any" \
+  -H "X-API-Key: your-api-key" \
   -d "{\"model\":\"claude-opus-4-6\",\"max_tokens\":1024,\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}"
 ```
 
@@ -95,7 +99,7 @@ curl http://localhost:8000/v1/messages \
 ```bash
 curl http://localhost:8000/v1/messages \
   -H "Content-Type: application/json" \
-  -H "x-api-key: any" \
+  -H "X-API-Key: your-api-key" \
   -d "{\"model\":\"claude-opus-4-6\",\"max_tokens\":1024,\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}"
 ```
 
@@ -104,6 +108,7 @@ curl http://localhost:8000/v1/messages \
 ```bash
 curl http://localhost:8000/v1/responses \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
   -d "{\"model\":\"gpt-4.1-mini\",\"input\":\"hello\"}"
 ```
 
@@ -112,6 +117,7 @@ curl http://localhost:8000/v1/responses \
 ```bash
 curl http://localhost:8000/v1/responses \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
   -d "{\"model\":\"gpt-4.1-mini\",\"stream\":true,\"input\":\"hello\"}"
 ```
 
@@ -120,6 +126,7 @@ curl http://localhost:8000/v1/responses \
 ```bash
 curl http://localhost:8000/v1/responses \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
   -d "{\"model\":\"gpt-4.1-mini\",\"input\":\"hello\",\"instructions\":\"You are a helpful assistant.\"}"
 ```
 
@@ -128,6 +135,7 @@ curl http://localhost:8000/v1/responses \
 ```bash
 curl http://localhost:8000/v1/images/generations \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
   -d "{\"model\":\"Nano-banana 2 绘图\",\"prompt\":\"科技感封面图\",\"n\":2,\"ratio\":\"16:9\"}"
 ```
 
@@ -136,6 +144,7 @@ curl http://localhost:8000/v1/images/generations \
 ```bash
 curl http://localhost:8000/v1/images/create \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
   -d "{\"model\":\"GT-4o-image-vip（绘图模型）\",\"prompt\":\"科技感封面图\",\"n\":2,\"ratio\":\"16:9\"}"
 ```
 
@@ -180,9 +189,57 @@ docker compose down
 
 - `authorization` 头使用原始 JWT，不要加 `Bearer` 前缀。
 - 请勿提交真实账号、密码、JWT、Cookie 到代码仓库。
-- 该服务默认是自用场景，若多人使用请先加鉴权和配额控制。
 - `MAX_CONCURRENT` 过高可能导致上游风控或 429 错误。
 - 流式请求中客户端主动断开连接属于正常场景，服务端会清理资源并结束会话。
+
+## API Key 鉴权
+
+服务支持可选的 API Key 鉴权，防止未授权访问。
+
+### 配置方式
+
+**环境变量：**
+
+```bash
+WEB2API_API_KEYS=key1,key2,key3
+```
+
+**配置文件 `config/config.yaml`：**
+
+```yaml
+api:
+  api_keys:
+    - key1
+    - key2
+    - key3
+```
+
+### 使用方式
+
+客户端请求时在 HTTP 头中添加 `X-API-Key`：
+
+```bash
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: key1" \
+  -d '{"model":"gpt-4.1-mini","messages":[{"role":"user","content":"hello"}]}'
+```
+
+### 鉴权行为
+
+- `WEB2API_API_KEYS` 为空或不配置：不启用鉴权，所有请求均可访问
+- `WEB2API_API_KEYS` 有值：请求必须携带匹配的 `X-API-Key` 头
+- 鉴权失败返回 `401 Unauthorized`
+
+### 豁免路径
+
+以下端点无需鉴权：
+
+- `/metrics` - Prometheus 指标
+- `/stats` - 监控仪表盘
+- `/docs` - API 文档
+- `/openapi.json` - OpenAPI 规范
+- `/redoc` - ReDoc 文档
 
 ## Codex 集成
 
@@ -209,7 +266,7 @@ codex config set api.base_url http://localhost:8000/v1
 base_url = "http://localhost:8000/v1"
 ```
 
-3. 设置 API Key（任意值即可）：
+3. 设置 API Key（与 `WEB2API_API_KEYS` 配置的值一致）：
 
 ```bash
 codex config set api.key "your-api-key"
@@ -274,4 +331,9 @@ monitoring:
   enabled: true
   metrics_endpoint: /metrics
   stats_endpoint: /stats
+
+api:
+  api_keys:
+    - your-api-key-1
+    - your-api-key-2
 ```
